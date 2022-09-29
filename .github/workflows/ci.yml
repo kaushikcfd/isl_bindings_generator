@@ -41,4 +41,5 @@ jobs:
       - name: Run tests
         run: |
           git clone https://repo.or.cz/isl.git
+          sudo apt install llvm-dev clang
           cargo run
