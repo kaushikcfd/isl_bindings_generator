@@ -40,7 +40,6 @@ jobs:
           directory: ${{ runner.temp }}/llvm
       - name: Symlink libclang.so
         run: |
-          ls -al
           sudo ln -s libclang.so.13 /lib/x86_64-linux-gnu/libclang.so
         working-directory: ${{ env.LLVM_PATH }}/lib
       - name: Install Rust
