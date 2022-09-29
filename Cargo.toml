@@ -1,0 +1,13 @@
+[package]
+name = "isl_bindings_generator"
+authors = ["Kaushik Kulkarni <kaushikcfd@gmail.com>"]
+description = "Rust binding generator for Integer Set Library"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clang-sys = "1.4.0"
