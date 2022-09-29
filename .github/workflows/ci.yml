@@ -33,6 +33,16 @@ jobs:
           - nightly
     steps:
       - uses: actions/checkout@v1
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+        version: "10.0"
+        directory: ${{ runner.temp }}/llvm
+      - name: Symlink libclang.so
+        run: |
+          ls -al
+          sudo ln -s libclang-11.so.1 /lib/x86_64-linux-gnu/libclang.so
+        working-directory: ${{ env.LLVM_PATH }}/lib
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -41,6 +51,4 @@ jobs:
       - name: Run tests
         run: |
           git clone https://repo.or.cz/isl.git
-          sudo apt install llvm-dev clang
-          ls /usr/lib64/
           cargo run
