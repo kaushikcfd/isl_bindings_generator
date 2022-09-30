@@ -8,20 +8,20 @@ use std::option::Option;
 use std::path::Path;
 
 lazy_static! {
-    static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
-        HashMap::from([("isl_basic_set", "BasicSet"),
-                       ("isl_context", "Context"),
-                       ("isl_aff", "Aff"),
-                       ("isl_dim_type", "DimType"),
-                       ("const char*", "&str"),]);
     static ref C_TO_RS_EXTERN: HashMap<&'static str, &'static str> =
-        HashMap::from([("isl_context", "uintptr_t"),
-                       ("isl_basic_set", "uintptr_t"),
-                       ("isl_basic_map", "uintptr_t"),
-                       ("isl_set", "uintptr_t"),
-                       ("isl_map", "uintptr_t"),
-                       ("isl_aff", "uintptr_t"),
+        HashMap::from([("isl_context *", "uintptr_t"),
+                       ("isl_basic_set *", "uintptr_t"),
+                       ("isl_basic_map *", "uintptr_t"),
+                       ("isl_set *", "uintptr_t"),
+                       ("isl_map *", "uintptr_t"),
+                       ("isl_aff *", "uintptr_t"),
                        ("const char*", "*const c_char"),]);
+    static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
+        HashMap::from([("isl_basic_set *", "BasicSet"),
+                       ("isl_context *", "Context"),
+                       ("isl_aff *", "Aff"),
+                       ("enum isl_dim_type", "DimType"),
+                       ("const char*", "&str"),]);
     static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_aff",
                                                                  "isl_context",
                                                                  "isl_basic_set",
@@ -75,6 +75,12 @@ struct Function {
     arg_names: Vec<String>,
     arg_types: Vec<String>,
     ret_type: Option<String>,
+}
+
+#[derive(Debug)]
+enum ISLOwnership {
+    Keep,
+    Take,
 }
 
 fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec<Token>)
@@ -149,12 +155,30 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
 
         // }}}
 
-        let c_arg_types = func_decl.get_arguments()
-                                   .unwrap()
-                                   .iter()
+        let arguments = func_decl.get_arguments().unwrap();
+        let c_arg_types = arguments.iter()
                                    .map(|x| x.get_type().unwrap().get_display_name())
                                    .collect::<Vec<_>>();
+        let mut borrowing_rules: Vec<Option<ISLOwnership>> = vec![];
+        for arg in arguments {
+            let (start_loc, _) = get_start_end_locations(arg);
+            let qualifier_tok = idx_to_token[loc_to_idx[&start_loc] - 1];
+            let borrow_rule = if qualifier_tok.get_kind() == TokenKind::Identifier {
+                match qualifier_tok.get_spelling().as_str() {
+                    "__isl_take" => Some(ISLOwnership::Take),
+                    "__isl_keep" => Some(ISLOwnership::Keep),
+                    x => panic!("Unknown ownership rule {}", x),
+                }
+            } else {
+                assert_eq!(qualifier_tok.get_kind(), TokenKind::Punctuation);
+                None
+            };
+
+            borrowing_rules.push(borrow_rule);
+        }
+
         println!("{:?}", c_arg_types);
+        println!("{:?}", borrowing_rules);
 
         panic!("Abhi key liye bas bhai");
     }
