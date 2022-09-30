@@ -4,6 +4,7 @@ use codegen::Scope;
 use hashbrown::{HashMap, HashSet};
 use lazy_static::lazy_static;
 use std::fs;
+use std::option::Option;
 use std::path::Path;
 
 lazy_static! {
@@ -69,35 +70,20 @@ fn get_start_end_locations(e: clang::Entity) -> ((usize, usize), (usize, usize))
      (end_src_loc.1 as usize, end_src_loc.2 as usize))
 }
 
-fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str) {
-    let clang = clang::Clang::new().unwrap();
-    let index = clang::Index::new(&clang, false, true);
-    let t_unit = index.parser(src_file)
-                      .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
-                      .detailed_preprocessing_record(true)
-                      .parse()
-                      .unwrap();
+struct Function {
+    name: String,
+    arg_names: Vec<String>,
+    arg_types: Vec<String>,
+    ret_type: Option<String>,
+}
 
-    let func_decls: Vec<_> = t_unit.get_entity()
-                                   .get_children()
-                                   .into_iter()
-                                   .filter(|e| {
-                                       e.get_kind() == clang::EntityKind::FunctionDecl
-                                       && e.get_name().is_some()
-                                       && e.get_name().unwrap().starts_with(src_t)
-                                       && e.get_location().is_some()
-                                       && e.get_location().unwrap().get_presumed_location().0
-                                          == src_file.to_string()
-                                   })
-                                   .collect();
-
-    let (loc_to_idx, idx_to_token) =
-        get_tokens_sorted_by_occurence(t_unit.get_entity().get_range().unwrap().tokenize());
-
-    let mut scope = Scope::new();
-    scope.import("libc", "uintptr_t");
-    scope.new_struct(dst_t).field("ptr", "uintptr_t");
-    let _dst_impl = scope.new_impl(dst_t);
+fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec<Token>)
+                                     -> (Vec<Function>, Vec<Function>) {
+    // external_functions: External functions that must be declared.
+    let external_functions: Vec<Function> = vec![];
+    // bindings_functions: Rust functions that are to be generated.
+    let bindings_functions: Vec<Function> = vec![];
+    let (loc_to_idx, idx_to_token) = get_tokens_sorted_by_occurence(tokens);
 
     for func_decl in func_decls {
         println!("Traversing {}", func_decl.get_name().unwrap());
@@ -163,14 +149,58 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
         // }}}
 
-        if is_exported | is_constructor {
-            println!("Will export {}", func_decl.get_name().unwrap());
-        }
+        let c_arg_types = func_decl.get_arguments()
+                                   .unwrap()
+                                   .iter()
+                                   .map(|x| x.get_type().unwrap().get_display_name())
+                                   .collect::<Vec<_>>();
+        println!("{:?}", c_arg_types);
+
+        panic!("Abhi key liye bas bhai");
     }
 
-    if true {
-        panic!("Dandey aur kaam baaki hai");
-    }
+    (external_functions, bindings_functions)
+}
+
+fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str) {
+    let clang = clang::Clang::new().unwrap();
+    let index = clang::Index::new(&clang, false, true);
+    let t_unit = index.parser(src_file)
+                      .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
+                      .detailed_preprocessing_record(true)
+                      .parse()
+                      .unwrap();
+    let tokens = t_unit.get_entity().get_range().unwrap().tokenize();
+
+    // func_decls: Functions for which bindings are to be generated
+    let func_decls: Vec<_> = t_unit.get_entity()
+                                   .get_children()
+                                   .into_iter()
+                                   .filter(|e| {
+                                       e.get_kind() == clang::EntityKind::FunctionDecl
+                                       && e.get_name().is_some()
+                                       && e.get_name().unwrap().starts_with(src_t)
+                                       && e.get_location().is_some()
+                                       && e.get_location().unwrap().get_presumed_location().0
+                                          == src_file.to_string()
+                                   })
+                                   .collect();
+    let (extern_funcs, binding_funcs) = get_extern_and_bindings_functions(func_decls, tokens);
+
+    let mut scope = Scope::new();
+
+    // {{{ Generate struct for dst_t
+
+    scope.import("libc", "uintptr_t");
+    scope.new_struct(dst_t).field("ptr", "uintptr_t");
+
+    // }}}
+
+    // {{{ TODO: Implement the struct 'dst_t'
+
+    let _dst_impl = scope.new_impl(dst_t);
+
+    // }}}
 
     // {{{ impl Drop for `dst_t`.
 
@@ -181,7 +211,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
              .line(format!("unsafe {{ {}_free(self.ptr) }}", src_t));
 
     // }}}
-    //
+
     panic!("The code generated is --\n{}", scope.to_string());
 }
 
