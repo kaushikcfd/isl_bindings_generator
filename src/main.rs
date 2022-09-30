@@ -28,6 +28,8 @@ lazy_static! {
                                                                  "isl_set",
                                                                  "isl_basic_map",
                                                                  "isl_map"]);
+    static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
+        HashMap::from([("in", "in_")]);
 }
 
 fn compare_tuples(x: &(usize, usize), y: &(usize, usize)) -> std::cmp::Ordering {
@@ -70,17 +72,27 @@ fn get_start_end_locations(e: clang::Entity) -> ((usize, usize), (usize, usize))
      (end_src_loc.1 as usize, end_src_loc.2 as usize))
 }
 
-struct Function {
-    name: String,
-    arg_names: Vec<String>,
-    arg_types: Vec<String>,
-    ret_type: Option<String>,
+// FIXME: Get rid of these 'pub' visibility (only present to make linter happy)
+pub struct Function {
+    pub name: String,
+    pub arg_names: Vec<String>,
+    pub arg_types: Vec<String>,
+    pub ret_type: Option<String>,
 }
 
 #[derive(Debug)]
 enum ISLOwnership {
     Keep,
     Take,
+}
+
+/// Returns an identifier based on `input` to avoid using a Rust-keyword.
+fn guard_identifier(input: impl ToString) -> String {
+    let input_str = input.to_string();
+    match KEYWORD_TO_IDEN.get(input_str.as_str()) {
+        Some(x) => x.to_string(),
+        None => input.to_string(),
+    }
 }
 
 fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec<Token>)
@@ -177,8 +189,14 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             borrowing_rules.push(borrow_rule);
         }
 
-        println!("{:?}", c_arg_types);
-        println!("{:?}", borrowing_rules);
+        let ret_type = match func_decl.get_result_type() {
+            Some(x) => Some(x.get_display_name()),
+            None => None,
+        };
+
+        println!("Return type = {:?}", ret_type);
+        println!("Parameter types = {:?}", c_arg_types);
+        println!("Borrowship rules = {:?}", borrowing_rules);
 
         panic!("Abhi key liye bas bhai");
     }
@@ -239,11 +257,64 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
     panic!("The code generated is --\n{}", scope.to_string());
 }
 
+/// Generate rust code to define the `isl_dim_type` enum declation in rust and
+/// writes the generated to the `dst_file` path. (Touches the file if not
+/// already present)
+///
+/// # Warnings
+///  
+/// - Overwrites the contents of `dst_file`.
+fn define_dim_type_enum(dst_file: &str, src_file: &str) {
+    let clang = clang::Clang::new().unwrap();
+    let index = clang::Index::new(&clang, false, true);
+    let t_unit = index.parser(src_file)
+                      .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
+                      .detailed_preprocessing_record(true)
+                      .parse()
+                      .unwrap();
+
+    let isl_dim_type_decl = t_unit.get_entity()
+                                  .get_children()
+                                  .into_iter()
+                                  .filter(|e| {
+                                      e.get_kind() == clang::EntityKind::EnumDecl
+                                      && e.get_display_name().is_some()
+                                      && e.get_display_name().unwrap() == "isl_dim_type"
+                                  })
+                                  .next()
+                                  .unwrap();
+
+    // KK: Assertion to guard assumption
+    assert!(isl_dim_type_decl.get_children()
+                             .into_iter()
+                             .all(|x| x.get_kind() == clang::EntityKind::EnumConstantDecl));
+
+    let c_variant_names = isl_dim_type_decl.get_children()
+                                           .into_iter()
+                                           .map(|x| x.get_display_name().unwrap())
+                                           .collect::<Vec<_>>();
+
+    // KK: Assertion to guard assumption
+    assert!(c_variant_names.iter().all(|x| x.starts_with("isl_dim_")));
+
+    let mut scope = Scope::new();
+    let dim_type_enum = scope.new_enum("DimType");
+
+    for c_variant_name in c_variant_names {
+        let name_in_rust = c_variant_name[8..].to_string();
+        dim_type_enum.new_variant(guard_identifier(name_in_rust));
+    }
+
+    // Write the generated code
+    fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
+}
+
 fn main() {
     if !Path::new("src/bindings/").is_dir() {
         fs::create_dir("src/bindings/").unwrap();
     }
 
+    define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
