@@ -91,6 +91,7 @@ fn get_start_end_locations(e: &clang::Entity) -> ((usize, usize), (usize, usize)
 }
 
 /// Records the properties of a function node in an AST.
+#[derive(Clone)]
 struct Function {
     /// name of the function symbol
     name: String,
@@ -238,7 +239,7 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
         "uintptr_t" => {
             scope.import("libc", "uintptr_t");
         }
-        "i32" | "&str" | "*const c_char" | "u32" => {}
+        "i32" | "&str" | "*const c_char" | "u32" | "bool" => {}
         x if ISL_TYPES_RS.contains(x) => {
             scope.import("crate::bindings", x);
         }
@@ -253,7 +254,8 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
 /// Returns the method name for the binding to generate on the Rust end.
 fn get_rust_method_name(func_decl: &clang::Entity, c_struct_t: &str) -> String {
     let c_name = func_decl.get_name().unwrap();
-    let name_in_rust = c_name[c_struct_t.len()..].to_string();
+    // Remove the type prefix (For eg. isl_basic_set_read_from_str -> read_from_str)
+    let name_in_rust = c_name[c_struct_t.len() + 1..].to_string();
     guard_identifier(name_in_rust)
 }
 
@@ -384,7 +386,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
                            zip(c_arg_types, borrowing_rules).into_iter()
                                                             .map(|(x, brw)| to_rust_arg_t(x, brw))
                                                             .collect(),
-                       ret_type: ret_type.map(|x| to_extern_arg_t(x)) };
+                       ret_type: ret_type.map(|x| to_rust_arg_t(x, Some(ISLOwnership::Take))) };
 
         external_functions.push(extern_func);
         bindings_functions.push(binding_func);
@@ -437,14 +439,14 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     // {{{ Generate struct for dst_t
 
-    scope.new_struct(dst_t).field("ptr", "uintptr_t");
+    scope.new_struct(dst_t).field("ptr", "uintptr_t").vis("pub");
 
     // }}}
 
-    // {{{ TODO: Declare the extern functions
+    // {{{ Declare the extern functions
 
     scope.raw("extern \"C\" {");
-    for extern_func in extern_funcs {
+    for extern_func in extern_funcs.clone() {
         // TODO: Not ideal to emit raw strings, but `codegen` crate lacks support for
         // function declarations.
         // See https://gitlab.com/IovoslavIovchev/codegen/-/issues/11
@@ -465,7 +467,37 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     // {{{ TODO: Implement the struct 'dst_t'
 
-    let _dst_impl = scope.new_impl(dst_t);
+    let dst_impl = scope.new_impl(dst_t);
+
+    // KK: Assumption guarded by assertion. There is a one-to-one mapping between
+    // the binding and the external functions
+    assert_eq!(extern_funcs.len(), binding_funcs.len());
+
+    for (extern_func, binding_func) in zip(extern_funcs, binding_funcs) {
+        let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str());
+        let self_arg_t = &binding_func.arg_names[0];
+
+        // emit first argument to the method
+        if self_arg_t.starts_with("&") {
+            assert_eq!(self_arg_t.to_string(), format!("&{}", dst_t));
+            impl_fn = impl_fn.arg_ref_self();
+        } else {
+            impl_fn = impl_fn.arg_self();
+        }
+
+        // add the rest of the arguments
+        for (arg_name, arg_t) in zip(binding_func.arg_names[1..].iter(),
+                                     binding_func.arg_types[1..].iter())
+        {
+            impl_fn = impl_fn.arg(arg_name, arg_t);
+        }
+
+        // add the return type
+        match binding_func.ret_type {
+            Some(x) => impl_fn.ret(x),
+            None => impl_fn,
+        };
+    }
 
     // }}}
 
