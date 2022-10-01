@@ -20,6 +20,7 @@ lazy_static! {
                        ("isl_basic_set *", "BasicSet"),
                        ("isl_basic_set_list *", "BasicSetList"),
                        ("isl_set *", "Set"),
+                       ("isl_set_list *", "SetList"),
                        ("isl_basic_map *", "BasicMap"),
                        ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
@@ -36,6 +37,7 @@ lazy_static! {
                                                                       "isl_basic_set *",
                                                                       "isl_basic_set_list *",
                                                                       "isl_set *",
+                                                                      "isl_set_list *",
                                                                       "isl_basic_map *",
                                                                       "isl_map *",
                                                                       "isl_aff *",
@@ -239,7 +241,14 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
         "uintptr_t" => {
             scope.import("libc", "uintptr_t");
         }
-        "i32" | "&str" | "*const c_char" | "u32" | "bool" => {}
+        "i32" | "u32" | "bool" => {}
+        "&str" => {
+            scope.import("std::ffi", "CString");
+            scope.import("std::ffi", "CStr");
+        }
+        "*const c_char" => {
+            scope.import("std::os::raw", "c_char");
+        }
         x if ISL_TYPES_RS.contains(x) => {
             scope.import("crate::bindings", x);
         }
@@ -247,7 +256,7 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
             scope.import("crate::bindings", &x[1..]);
         }
 
-        _ => panic!("Unkown type '{}'.", ty_name),
+        _ => panic!("Unknown type '{}'.", ty_name),
     };
 }
 
@@ -260,6 +269,10 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
 
     match rs_ty_name {
         "i32" | "u32" | "bool" | "DimType" => {}
+        "&str" => {
+            func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
+            func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
+        }
         x if (ISL_TYPES_RS.contains(x)
               || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
         {
@@ -273,17 +286,29 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
 /// it's corresponding type in Rust land.
 fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Option<String>,
                                     var_name: impl ToString) {
-    let rs_ty_name = rs_ty_name.unwrap();
-    let var_name = var_name.to_string();
+    match rs_ty_name {
+        Some(rs_ty_name) => {
+            let var_name = var_name.to_string();
 
-    match rs_ty_name.as_str() {
-        "i32" | "u32" | "bool" | "DimType" => {}
-        x if (ISL_TYPES_RS.contains(x)
-              || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
-        {
-            func.line(format!("let {} = {} {{ ptr: {} }};", var_name, rs_ty_name, var_name));
+            match rs_ty_name.as_str() {
+                "i32" | "u32" | "bool" | "DimType" => {}
+                x if (ISL_TYPES_RS.contains(x)
+                      || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
+                {
+                    func.line(format!("let {} = {} {{ ptr: {} }};",
+                                      var_name, rs_ty_name, var_name));
+                }
+                "&str" => {
+                    func.line(format!("let {} = unsafe {{ CStr::from_ptr({}) }};",
+                                      var_name, var_name));
+                    func.line(format!("let {} = {}.to_str().unwrap();", var_name, var_name));
+                }
+                _ => unimplemented!("{}", rs_ty_name),
+            };
         }
-        _ => unimplemented!("{}", rs_ty_name),
+        None => {
+            // Function does not return anything.
+        }
     };
 }
 
@@ -305,7 +330,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
     let (loc_to_idx, idx_to_token) = get_tokens_sorted_by_occurence(tokens);
 
     for func_decl in func_decls {
-        println!("Traversing {}", func_decl.get_name().unwrap());
+        // println!("Traversing {}", func_decl.get_name().unwrap());
         let arguments = func_decl.get_arguments().unwrap();
         let (start_loc, end_loc) = get_start_end_locations(&func_decl);
         let (start_idx, end_idx) = (loc_to_idx[&start_loc], loc_to_idx[&end_loc]);
@@ -397,7 +422,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
                                    .collect::<Vec<_>>();
 
         if c_arg_types.iter().any(|x| is_type_not_supported(x)) {
-            println!("SKIPPPING");
+            println!("SKIPPPING {}", func_decl.get_name().unwrap());
             continue;
         }
         let c_arg_names = arguments.iter()
@@ -431,7 +456,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
     (external_functions, bindings_functions)
 }
 
-fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str) {
+fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) {
     let clang = clang::Clang::new().unwrap();
     let index = clang::Index::new(&clang, false, true);
     let t_unit = index.parser(src_file)
@@ -579,7 +604,9 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     // }}}
 
-    panic!("The code generated is --\n{}", scope.to_string());
+    // Write the generated code
+    fs::write(dst_file, scope.to_string()).expect(format!("error writing to {} file.", dst_file)
+                                                  .as_str());
 }
 
 /// Generate rust code to define the `isl_dim_type` enum declation in rust and
@@ -643,10 +670,16 @@ fn main() {
     }
 
     define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
+
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
                        "isl/include/isl/set.h");
+    // FIXME: Disabling this leads to a panic!
+    // implement_bindings("Set",
+    //                    "isl_set",
+    //                    "src/bindings/set.rs",
+    //                    "isl/include/isl/set.h");
 }
 
 // vim:fdm=marker
