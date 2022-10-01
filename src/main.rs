@@ -475,20 +475,27 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     for (extern_func, binding_func) in zip(extern_funcs, binding_funcs) {
         let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str());
-        let self_arg_t = &binding_func.arg_names[0];
+        // FIXME: /!\ Big FIXME. This logic doesn't account
+        let mut bnd_arg_names: Vec<String> = binding_func.arg_names.clone();
+        let mut bnd_arg_types: Vec<String> = binding_func.arg_types.clone();
 
         // emit first argument to the method
-        if self_arg_t.starts_with("&") {
-            assert_eq!(self_arg_t.to_string(), format!("&{}", dst_t));
+        if bnd_arg_types[0] == format!("&{}", dst_t) {
+            // consume the first argument
             impl_fn = impl_fn.arg_ref_self();
-        } else {
+            bnd_arg_names = bnd_arg_names[1..].to_vec();
+            bnd_arg_types = bnd_arg_types[1..].to_vec();
+        } else if bnd_arg_types[0] == dst_t {
+            // consume the first argument
             impl_fn = impl_fn.arg_self();
+            bnd_arg_names = bnd_arg_names[1..].to_vec();
+            bnd_arg_types = bnd_arg_types[1..].to_vec();
+        } else {
+            // do nothing
         }
 
         // add the rest of the arguments
-        for (arg_name, arg_t) in zip(binding_func.arg_names[1..].iter(),
-                                     binding_func.arg_types[1..].iter())
-        {
+        for (arg_name, arg_t) in zip(bnd_arg_names.iter(), bnd_arg_types.iter()) {
             impl_fn = impl_fn.arg(arg_name, arg_t);
         }
 
@@ -497,6 +504,9 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
             Some(x) => impl_fn.ret(x),
             None => impl_fn,
         };
+
+        // Implement the function
+        panic!("The generated function is --\n{}", scope.to_string());
     }
 
     // }}}
@@ -555,8 +565,11 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
     assert!(c_variant_names.iter().all(|x| x.starts_with("isl_dim_")));
 
     let mut scope = Scope::new();
-    let dim_type_enum = scope.new_enum(C_TO_RS_BINDING["enum isl_dim_type"]);
-
+    let dim_type_enum = scope.new_enum(C_TO_RS_BINDING["enum isl_dim_type"])
+                             .repr("C")
+                             .derive("Display")
+                             .derive("Debug")
+                             .derive("Clone");
     for c_variant_name in c_variant_names {
         let name_in_rust = c_variant_name[8..].to_string();
         dim_type_enum.new_variant(guard_identifier(name_in_rust));
