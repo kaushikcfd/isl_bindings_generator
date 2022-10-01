@@ -14,6 +14,8 @@ lazy_static! {
                        ("isl_local_space *", "LocalSpace"),
                        ("isl_id *", "Id"),
                        ("isl_val *", "Val"),
+                       ("isl_point *", "Point"),
+                       ("isl_mat *", "Mat"),
                        ("isl_basic_set *", "BasicSet"),
                        ("isl_basic_set_list *", "BasicSetList"),
                        ("isl_set *", "Set"),
@@ -28,6 +30,8 @@ lazy_static! {
                                                                  "isl_local_space *",
                                                                  "isl_id *",
                                                                  "isl_val *",
+                                                                 "isl_point *",
+                                                                 "isl_mat *",
                                                                  "isl_basic_set *",
                                                                  "isl_basic_set_list *",
                                                                  "isl_set *",
@@ -137,6 +141,10 @@ fn is_type_not_supported(c_arg_t: &String) -> bool {
         true
     } else if c_arg_t == "const FILE *" {
         true
+    } else if c_arg_t == "isl_set **" {
+        true
+    } else if c_arg_t == "int *" {
+        true
     } else {
         false
     }
@@ -153,7 +161,13 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
         // FIXME: Add add an assertion for this assumption.
         // KK: Assumption: `# typedef isl_size i32`
         "i32"
+    } else if c_arg_t == "isl_bool" {
+        // Using i32 for isl_bool as it is not a real type.
+        // Will panic for -1
+        "i32"
     } else if c_arg_t == "const char *" {
+        "*const c_char"
+    } else if c_arg_t == "char *" {
         "*const c_char"
     } else if c_arg_t == "int" {
         "i32"
@@ -196,7 +210,12 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         // FIXME: Add add an assertion for this assumption.
         // KK: Assumption: `# typedef isl_size i32`
         "i32".to_string()
+    } else if c_arg_t == "isl_bool" {
+        // isl_bool_error is panc-ed.
+        "bool".to_string()
     } else if c_arg_t == "const char *" {
+        "&str".to_string()
+    } else if c_arg_t == "char *" {
         "&str".to_string()
     } else if c_arg_t == "int" {
         "i32".to_string()
@@ -298,6 +317,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
                 match qualifier_tok.get_spelling().as_str() {
                     "__isl_take" => Some(ISLOwnership::Take),
                     "__isl_keep" => Some(ISLOwnership::Keep),
+                    "__isl_give" => None, // FIXME
                     x => panic!("Unknown ownership rule {}", x),
                 }
             } else {
