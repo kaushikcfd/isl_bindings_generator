@@ -8,26 +8,26 @@ use std::option::Option;
 use std::path::Path;
 
 lazy_static! {
-    static ref C_TO_RS_EXTERN: HashMap<&'static str, &'static str> =
-        HashMap::from([("isl_context *", "uintptr_t"),
-                       ("isl_basic_set *", "uintptr_t"),
-                       ("isl_basic_map *", "uintptr_t"),
-                       ("isl_set *", "uintptr_t"),
-                       ("isl_map *", "uintptr_t"),
-                       ("isl_aff *", "uintptr_t"),
-                       ("const char*", "*const c_char"),]);
     static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
-        HashMap::from([("isl_basic_set *", "BasicSet"),
-                       ("isl_context *", "Context"),
+        HashMap::from([("isl_ctx *", "Context"),
+                       ("isl_space *", "Space"),
+                       ("isl_local_space *", "LocalSpace"),
+                       ("isl_id *", "Id"),
+                       ("isl_basic_set *", "BasicSet"),
+                       ("isl_set *", "Set"),
+                       ("isl_basic_map *", "BasicMap"),
+                       ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
                        ("enum isl_dim_type", "DimType")]);
-    static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_aff *",
-                                                                 "isl_context *",
+    static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
+                                                                 "isl_space *",
+                                                                 "isl_local_space *",
+                                                                 "isl_id *",
                                                                  "isl_basic_set *",
                                                                  "isl_set *",
                                                                  "isl_basic_map *",
                                                                  "isl_map *",
-                                                                 "enum isl_dim_type"]);
+                                                                 "isl_aff *"]);
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_")]);
 }
@@ -95,10 +95,26 @@ fn guard_identifier(input: impl ToString) -> String {
     }
 }
 
+/// Returns `true` only if `c_arg_t` is reference to a core isl object.
+/// Note that we do not consider `isl_dim_type` to be a core isl object.
+fn is_isl_type(c_arg_t: &impl ToString) -> bool {
+    let c_arg_t = &c_arg_t.to_string()[..];
+    if ISL_TYPES.contains(c_arg_t) {
+        true
+    } else if c_arg_t.starts_with("const ") && ISL_TYPES.contains(c_arg_t[6..].to_string().as_str())
+    {
+        true
+    } else {
+        false
+    }
+}
+
 /// Returns the name for `c_arg_t` to use in `extern "C"` block function
 /// declarations.
 fn to_extern_arg_t(c_arg_t: String) -> String {
-    let extern_t = if ISL_TYPES.contains(c_arg_t.as_str()) {
+    let extern_t = if c_arg_t == "enum isl_dim_type" {
+        "DimType"
+    } else if is_isl_type(&c_arg_t) {
         "uintptr_t"
     } else if c_arg_t == "isl_size" {
         // FIXME: Add add an assertion for this assumption.
@@ -106,6 +122,10 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
         "i32"
     } else if c_arg_t == "const char *" {
         "*const c_char"
+    } else if c_arg_t == "int" {
+        "i32"
+    } else if c_arg_t == "unsigned int" {
+        "i32"
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     };
@@ -118,7 +138,13 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
     let c_arg_t = c_arg_t.as_str();
     if c_arg_t == "enum isl_dim_type" {
         C_TO_RS_BINDING[c_arg_t].to_string()
-    } else if ISL_TYPES.contains(c_arg_t) {
+    } else if is_isl_type(&c_arg_t) {
+        let c_arg_t = if c_arg_t.starts_with("const ") {
+            c_arg_t[6..].to_string()
+        } else {
+            c_arg_t.to_string()
+        };
+        let c_arg_t = c_arg_t.as_str();
         match ownership.unwrap() {
             ISLOwnership::Keep => format!("&{}", C_TO_RS_BINDING[c_arg_t]),
             ISLOwnership::Take => C_TO_RS_BINDING[c_arg_t].to_string(),
@@ -129,6 +155,10 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         "i32".to_string()
     } else if c_arg_t == "const char *" {
         "&str".to_string()
+    } else if c_arg_t == "int" {
+        "i32".to_string()
+    } else if c_arg_t == "unsigned int" {
+        "u32".to_string()
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     }
