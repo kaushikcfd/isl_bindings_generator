@@ -13,25 +13,34 @@ lazy_static! {
                        ("isl_space *", "Space"),
                        ("isl_local_space *", "LocalSpace"),
                        ("isl_id *", "Id"),
+                       ("isl_val *", "Val"),
                        ("isl_basic_set *", "BasicSet"),
+                       ("isl_basic_set_list *", "BasicSetList"),
                        ("isl_set *", "Set"),
                        ("isl_basic_map *", "BasicMap"),
                        ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
+                       ("isl_pw_aff *", "PwAff"),
+                       ("isl_multi_aff *", "MultiAff"),
                        ("enum isl_dim_type", "DimType")]);
     static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
                                                                  "isl_space *",
                                                                  "isl_local_space *",
                                                                  "isl_id *",
+                                                                 "isl_val *",
                                                                  "isl_basic_set *",
+                                                                 "isl_basic_set_list *",
                                                                  "isl_set *",
                                                                  "isl_basic_map *",
                                                                  "isl_map *",
-                                                                 "isl_aff *"]);
+                                                                 "isl_aff *",
+                                                                 "isl_pw_aff *",
+                                                                 "isl_multi_aff *",]);
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_")]);
 }
 
+/// Returns the lexicographic ordering of `x` and `y`.
 fn compare_tuples(x: &(usize, usize), y: &(usize, usize)) -> std::cmp::Ordering {
     if x.0 == y.0 && x.1 == y.1 {
         std::cmp::Ordering::Equal
@@ -64,6 +73,8 @@ fn get_tokens_sorted_by_occurence(tokens: Vec<Token>)
     (loc_to_position, position_to_token)
 }
 
+/// Returns the `(start_line, start_column), (end_line, end_column)` describing
+/// source range of `e`.
 fn get_start_end_locations(e: &clang::Entity) -> ((usize, usize), (usize, usize)) {
     let src_range = e.get_range().unwrap();
     let start_src_loc = src_range.get_start().get_presumed_location();
@@ -72,12 +83,16 @@ fn get_start_end_locations(e: &clang::Entity) -> ((usize, usize), (usize, usize)
      (end_src_loc.1 as usize, end_src_loc.2 as usize))
 }
 
-// FIXME: Get rid of these 'pub' visibility (only present to make linter happy)
-pub struct Function {
-    pub name: String,
-    pub arg_names: Vec<String>,
-    pub arg_types: Vec<String>,
-    pub ret_type: Option<String>,
+/// Records the properties of a function node in an AST.
+struct Function {
+    /// name of the function symbol
+    name: String,
+    /// Argument names
+    arg_names: Vec<String>,
+    /// Argument types
+    arg_types: Vec<String>,
+    /// Return type
+    ret_type: Option<String>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -103,6 +118,24 @@ fn is_isl_type(c_arg_t: &impl ToString) -> bool {
         true
     } else if c_arg_t.starts_with("const ") && ISL_TYPES.contains(c_arg_t[6..].to_string().as_str())
     {
+        true
+    } else if c_arg_t.starts_with("struct ")
+              && ISL_TYPES.contains(c_arg_t[7..].to_string().as_str())
+    {
+        true
+    } else {
+        false
+    }
+}
+
+/// Returns `true` only if `c_arg_t` is a type not supported by
+/// [`isl_bindings_generator`].
+fn is_type_not_supported(c_arg_t: &String) -> bool {
+    let c_arg_t = &c_arg_t[..];
+
+    if c_arg_t == "FILE *" {
+        true
+    } else if c_arg_t == "const FILE *" {
         true
     } else {
         false
@@ -141,11 +174,21 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
     } else if is_isl_type(&c_arg_t) {
         let c_arg_t = if c_arg_t.starts_with("const ") {
             c_arg_t[6..].to_string()
+        } else if c_arg_t.starts_with("struct ") {
+            c_arg_t[7..].to_string()
         } else {
             c_arg_t.to_string()
         };
         let c_arg_t = c_arg_t.as_str();
-        match ownership.unwrap() {
+
+        let ownership = if c_arg_t == "isl_ctx *" {
+            // isl_ctx is always kept
+            ISLOwnership::Keep
+        } else {
+            ownership.unwrap()
+        };
+
+        match ownership {
             ISLOwnership::Keep => format!("&{}", C_TO_RS_BINDING[c_arg_t]),
             ISLOwnership::Take => C_TO_RS_BINDING[c_arg_t].to_string(),
         }
@@ -270,11 +313,17 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
         let c_arg_types = arguments.iter()
                                    .map(|x| x.get_type().unwrap().get_display_name())
                                    .collect::<Vec<_>>();
+
+        if c_arg_types.iter().any(|x| is_type_not_supported(x)) {
+            println!("SKIPPPING");
+            continue;
+        }
         let c_arg_names = arguments.iter()
                                    .map(|x| x.get_name().unwrap())
                                    .collect::<Vec<_>>();
 
         let ret_type = func_decl.get_result_type().map(|x| x.get_display_name());
+        let ret_type = ret_type.filter(|x| x != "void");
 
         let extern_func = Function { name: func_decl.get_name().unwrap(),
                                      arg_names: c_arg_names.clone(),
