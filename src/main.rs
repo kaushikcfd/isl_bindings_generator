@@ -4,6 +4,7 @@ use codegen::Scope;
 use hashbrown::{HashMap, HashSet};
 use lazy_static::lazy_static;
 use std::fs;
+use std::iter::zip;
 use std::option::Option;
 use std::path::Path;
 
@@ -25,21 +26,23 @@ lazy_static! {
                        ("isl_pw_aff *", "PwAff"),
                        ("isl_multi_aff *", "MultiAff"),
                        ("enum isl_dim_type", "DimType")]);
-    static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
-                                                                 "isl_space *",
-                                                                 "isl_local_space *",
-                                                                 "isl_id *",
-                                                                 "isl_val *",
-                                                                 "isl_point *",
-                                                                 "isl_mat *",
-                                                                 "isl_basic_set *",
-                                                                 "isl_basic_set_list *",
-                                                                 "isl_set *",
-                                                                 "isl_basic_map *",
-                                                                 "isl_map *",
-                                                                 "isl_aff *",
-                                                                 "isl_pw_aff *",
-                                                                 "isl_multi_aff *",]);
+    static ref ISL_CORE_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
+                                                                      "isl_space *",
+                                                                      "isl_local_space *",
+                                                                      "isl_id *",
+                                                                      "isl_val *",
+                                                                      "isl_point *",
+                                                                      "isl_mat *",
+                                                                      "isl_basic_set *",
+                                                                      "isl_basic_set_list *",
+                                                                      "isl_set *",
+                                                                      "isl_basic_map *",
+                                                                      "isl_map *",
+                                                                      "isl_aff *",
+                                                                      "isl_pw_aff *",
+                                                                      "isl_multi_aff *",]);
+    static ref ISL_TYPES_RS: HashSet<&'static str> =
+        HashSet::from_iter(C_TO_RS_BINDING.clone().into_values());
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_")]);
 }
@@ -118,13 +121,14 @@ fn guard_identifier(input: impl ToString) -> String {
 /// Note that we do not consider `isl_dim_type` to be a core isl object.
 fn is_isl_type(c_arg_t: &impl ToString) -> bool {
     let c_arg_t = &c_arg_t.to_string()[..];
-    if ISL_TYPES.contains(c_arg_t) {
+    if ISL_CORE_TYPES.contains(c_arg_t) {
         true
-    } else if c_arg_t.starts_with("const ") && ISL_TYPES.contains(c_arg_t[6..].to_string().as_str())
+    } else if c_arg_t.starts_with("const ")
+              && ISL_CORE_TYPES.contains(c_arg_t[6..].to_string().as_str())
     {
         true
     } else if c_arg_t.starts_with("struct ")
-              && ISL_TYPES.contains(c_arg_t[7..].to_string().as_str())
+              && ISL_CORE_TYPES.contains(c_arg_t[7..].to_string().as_str())
     {
         true
     } else {
@@ -154,7 +158,7 @@ fn is_type_not_supported(c_arg_t: &String) -> bool {
 /// declarations.
 fn to_extern_arg_t(c_arg_t: String) -> String {
     let extern_t = if c_arg_t == "enum isl_dim_type" {
-        "DimType"
+        C_TO_RS_BINDING[c_arg_t.as_str()]
     } else if is_isl_type(&c_arg_t) {
         "uintptr_t"
     } else if c_arg_t == "isl_size" {
@@ -224,6 +228,26 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     }
+}
+
+/// Imports `ty_name` from the correct path for `scope`.
+fn import_type(scope: &mut Scope, ty_name: &String) {
+    let ty_name = ty_name.as_str();
+
+    match ty_name {
+        "uintptr_t" => {
+            scope.import("libc", "uintptr_t");
+        }
+        "i32" | "&str" | "*const c_char" | "u32" => {}
+        x if ISL_TYPES_RS.contains(x) => {
+            scope.import("crate::bindings", x);
+        }
+        x if x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]) => {
+            scope.import("crate::bindings", &x[1..]);
+        }
+
+        _ => panic!("Unkown type '{}'.", ty_name),
+    };
 }
 
 /// Returns the method name for the binding to generate on the Rust end.
@@ -356,12 +380,10 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
         let binding_func =
             Function { name: get_rust_method_name(&func_decl, src_t),
                        arg_names: c_arg_names,
-                       arg_types: std::iter::zip(c_arg_types, borrowing_rules).into_iter()
-                                                                              .map(|(x, brw)| {
-                                                                                  to_rust_arg_t(x,
-                                                                                                brw)
-                                                                              })
-                                                                              .collect(),
+                       arg_types:
+                           zip(c_arg_types, borrowing_rules).into_iter()
+                                                            .map(|(x, brw)| to_rust_arg_t(x, brw))
+                                                            .collect(),
                        ret_type: ret_type.map(|x| to_extern_arg_t(x)) };
 
         external_functions.push(extern_func);
@@ -399,10 +421,45 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     let mut scope = Scope::new();
 
+    // {{{ Generate `use ...` statements.
+
+    for func in extern_funcs.iter().chain(binding_funcs.iter()) {
+        match &func.ret_type {
+            Some(x) => import_type(&mut scope, x),
+            None => {}
+        };
+        for arg_t in func.arg_types.iter() {
+            import_type(&mut scope, arg_t);
+        }
+    }
+
+    // }}}
+
     // {{{ Generate struct for dst_t
 
-    scope.import("libc", "uintptr_t");
     scope.new_struct(dst_t).field("ptr", "uintptr_t");
+
+    // }}}
+
+    // {{{ TODO: Declare the extern functions
+
+    scope.raw("extern \"C\" {");
+    for extern_func in extern_funcs {
+        // TODO: Not ideal to emit raw strings, but `codegen` crate lacks support for
+        // function declarations.
+        // See https://gitlab.com/IovoslavIovchev/codegen/-/issues/11
+        let args_str = zip(extern_func.arg_names, extern_func.arg_types).map(|(name, ty)| {
+                                                                            format!("{}: {}",
+                                                                                    name, ty)
+                                                                        })
+                                                                        .collect::<Vec<String>>()
+                                                                        .join(", ");
+        let ret_str = extern_func.ret_type
+                                 .map_or("".to_string(), |x| format!(" -> {}", x));
+
+        scope.raw(format!("    {}({}){};", extern_func.name, args_str, ret_str));
+    }
+    scope.raw("}");
 
     // }}}
 
@@ -466,7 +523,7 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
     assert!(c_variant_names.iter().all(|x| x.starts_with("isl_dim_")));
 
     let mut scope = Scope::new();
-    let dim_type_enum = scope.new_enum("DimType");
+    let dim_type_enum = scope.new_enum(C_TO_RS_BINDING["enum isl_dim_type"]);
 
     for c_variant_name in c_variant_names {
         let name_in_rust = c_variant_name[8..].to_string();
