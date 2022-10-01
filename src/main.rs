@@ -216,7 +216,7 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         // KK: Assumption: `# typedef isl_size i32`
         "i32".to_string()
     } else if c_arg_t == "isl_bool" {
-        // isl_bool_error is panc-ed.
+        // isl_bool_error should be panic-ed.
         "bool".to_string()
     } else if c_arg_t == "const char *" {
         "&str".to_string()
@@ -248,6 +248,42 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
         }
 
         _ => panic!("Unkown type '{}'.", ty_name),
+    };
+}
+
+/// Updates `func` by adding a line shadowing the variable `var_name` to pass it
+/// legally to an external function.
+fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &String,
+                                 var_name: impl ToString) {
+    let rs_ty_name = rs_ty_name.as_str();
+    let var_name = var_name.to_string();
+
+    match rs_ty_name {
+        "i32" | "u32" | "bool" | "DimType" => {}
+        x if (ISL_TYPES_RS.contains(x)
+              || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
+        {
+            func.line(format!("let {} = {}.ptr;", var_name, var_name));
+        }
+        _ => unimplemented!("{}", rs_ty_name),
+    };
+}
+
+/// Updates `func` by adding a line shadowing the variable `var_name` to refer
+/// it's corresponding type in Rust land.
+fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Option<String>,
+                                    var_name: impl ToString) {
+    let rs_ty_name = rs_ty_name.unwrap();
+    let var_name = var_name.to_string();
+
+    match rs_ty_name.as_str() {
+        "i32" | "u32" | "bool" | "DimType" => {}
+        x if (ISL_TYPES_RS.contains(x)
+              || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
+        {
+            func.line(format!("let {} = {} {{ ptr: {} }};", var_name, rs_ty_name, var_name));
+        }
+        _ => unimplemented!("{}", rs_ty_name),
     };
 }
 
@@ -465,7 +501,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
 
     // }}}
 
-    // {{{ TODO: Implement the struct 'dst_t'
+    // {{{ Implement the struct 'dst_t'
 
     let dst_impl = scope.new_impl(dst_t);
 
@@ -478,6 +514,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
         // FIXME: /!\ Big FIXME. This logic doesn't account
         let mut bnd_arg_names: Vec<String> = binding_func.arg_names.clone();
         let mut bnd_arg_types: Vec<String> = binding_func.arg_types.clone();
+        let mut arg_names_in_fn_body: Vec<String> = vec![];
 
         // emit first argument to the method
         if bnd_arg_types[0] == format!("&{}", dst_t) {
@@ -485,11 +522,13 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
             impl_fn = impl_fn.arg_ref_self();
             bnd_arg_names = bnd_arg_names[1..].to_vec();
             bnd_arg_types = bnd_arg_types[1..].to_vec();
+            arg_names_in_fn_body.push("self".to_string());
         } else if bnd_arg_types[0] == dst_t {
             // consume the first argument
             impl_fn = impl_fn.arg_self();
             bnd_arg_names = bnd_arg_names[1..].to_vec();
             bnd_arg_types = bnd_arg_types[1..].to_vec();
+            arg_names_in_fn_body.push("self".to_string());
         } else {
             // do nothing
         }
@@ -497,16 +536,35 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
         // add the rest of the arguments
         for (arg_name, arg_t) in zip(bnd_arg_names.iter(), bnd_arg_types.iter()) {
             impl_fn = impl_fn.arg(arg_name, arg_t);
+            arg_names_in_fn_body.push(arg_name.to_string());
         }
 
         // add the return type
-        match binding_func.ret_type {
+        match binding_func.ret_type.clone() {
             Some(x) => impl_fn.ret(x),
             None => impl_fn,
         };
 
         // Implement the function
-        panic!("The generated function is --\n{}", scope.to_string());
+        for (arg_type, (arg_name, arg_name_in_fn_body)) in zip(binding_func.arg_types.iter(),
+                                                               zip(binding_func.arg_names.iter(),
+                                                                   arg_names_in_fn_body.iter()))
+        {
+            if arg_name != arg_name_in_fn_body {
+                impl_fn.line(format!("let {} = {};", arg_name, arg_name_in_fn_body));
+            }
+
+            preprocess_var_to_extern_func(&mut impl_fn, arg_type, arg_name);
+        }
+
+        let passed_args_str = binding_func.arg_names.join(", ");
+
+        impl_fn.line(format!("let isl_rs_result = unsafe {{ {}({}) }};",
+                             extern_func.name, passed_args_str));
+
+        postprocess_var_from_extern_func(&mut impl_fn, binding_func.ret_type, "isl_rs_result");
+
+        impl_fn.line("isl_rs_result");
     }
 
     // }}}
