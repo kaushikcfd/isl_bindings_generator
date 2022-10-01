@@ -20,14 +20,14 @@ lazy_static! {
         HashMap::from([("isl_basic_set *", "BasicSet"),
                        ("isl_context *", "Context"),
                        ("isl_aff *", "Aff"),
-                       ("enum isl_dim_type", "DimType"),
-                       ("const char*", "&str"),]);
-    static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_aff",
-                                                                 "isl_context",
-                                                                 "isl_basic_set",
-                                                                 "isl_set",
-                                                                 "isl_basic_map",
-                                                                 "isl_map"]);
+                       ("enum isl_dim_type", "DimType")]);
+    static ref ISL_TYPES: HashSet<&'static str> = HashSet::from(["isl_aff *",
+                                                                 "isl_context *",
+                                                                 "isl_basic_set *",
+                                                                 "isl_set *",
+                                                                 "isl_basic_map *",
+                                                                 "isl_map *",
+                                                                 "enum isl_dim_type"]);
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_")]);
 }
@@ -64,7 +64,7 @@ fn get_tokens_sorted_by_occurence(tokens: Vec<Token>)
     (loc_to_position, position_to_token)
 }
 
-fn get_start_end_locations(e: clang::Entity) -> ((usize, usize), (usize, usize)) {
+fn get_start_end_locations(e: &clang::Entity) -> ((usize, usize), (usize, usize)) {
     let src_range = e.get_range().unwrap();
     let start_src_loc = src_range.get_start().get_presumed_location();
     let end_src_loc = src_range.get_end().get_presumed_location();
@@ -80,7 +80,7 @@ pub struct Function {
     pub ret_type: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum ISLOwnership {
     Keep,
     Take,
@@ -95,17 +95,65 @@ fn guard_identifier(input: impl ToString) -> String {
     }
 }
 
-fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec<Token>)
+/// Returns the name for `c_arg_t` to use in `extern "C"` block function
+/// declarations.
+fn to_extern_arg_t(c_arg_t: String) -> String {
+    let extern_t = if ISL_TYPES.contains(c_arg_t.as_str()) {
+        "uintptr_t"
+    } else if c_arg_t == "isl_size" {
+        // FIXME: Add add an assertion for this assumption.
+        // KK: Assumption: `# typedef isl_size i32`
+        "i32"
+    } else if c_arg_t == "const char *" {
+        "*const c_char"
+    } else {
+        panic!("Unexpected type: {}", c_arg_t)
+    };
+
+    extern_t.to_string()
+}
+
+/// Returns the name for `c_arg_t` to use in the rust-binding function.
+fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
+    let c_arg_t = c_arg_t.as_str();
+    if c_arg_t == "enum isl_dim_type" {
+        C_TO_RS_BINDING[c_arg_t].to_string()
+    } else if ISL_TYPES.contains(c_arg_t) {
+        match ownership.unwrap() {
+            ISLOwnership::Keep => format!("&{}", C_TO_RS_BINDING[c_arg_t]),
+            ISLOwnership::Take => C_TO_RS_BINDING[c_arg_t].to_string(),
+        }
+    } else if c_arg_t == "isl_size" {
+        // FIXME: Add add an assertion for this assumption.
+        // KK: Assumption: `# typedef isl_size i32`
+        "i32".to_string()
+    } else if c_arg_t == "const char *" {
+        "&str".to_string()
+    } else {
+        panic!("Unexpected type: {}", c_arg_t)
+    }
+}
+
+/// Returns the method name for the binding to generate on the Rust end.
+fn get_rust_method_name(func_decl: &clang::Entity, c_struct_t: &str) -> String {
+    let c_name = func_decl.get_name().unwrap();
+    let name_in_rust = c_name[c_struct_t.len()..].to_string();
+    guard_identifier(name_in_rust)
+}
+
+fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec<Token>,
+                                     src_t: &str)
                                      -> (Vec<Function>, Vec<Function>) {
     // external_functions: External functions that must be declared.
-    let external_functions: Vec<Function> = vec![];
+    let mut external_functions: Vec<Function> = vec![];
     // bindings_functions: Rust functions that are to be generated.
-    let bindings_functions: Vec<Function> = vec![];
+    let mut bindings_functions: Vec<Function> = vec![];
     let (loc_to_idx, idx_to_token) = get_tokens_sorted_by_occurence(tokens);
 
     for func_decl in func_decls {
         println!("Traversing {}", func_decl.get_name().unwrap());
-        let (start_loc, end_loc) = get_start_end_locations(func_decl);
+        let arguments = func_decl.get_arguments().unwrap();
+        let (start_loc, end_loc) = get_start_end_locations(&func_decl);
         let (start_idx, end_idx) = (loc_to_idx[&start_loc], loc_to_idx[&end_loc]);
         assert!(start_idx <= end_idx);
 
@@ -132,7 +180,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
 
         // {{{ parse __isl_export, __isl_constructor
 
-        let (is_constructor, is_exported) = if isl_give {
+        let (_is_constructor, _is_exported) = if isl_give {
             let qualifier1 = idx_to_token[start_idx - 2];
             let qualifier2 = idx_to_token[start_idx - 3];
             if qualifier1.get_kind() == TokenKind::Punctuation {
@@ -167,13 +215,11 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
 
         // }}}
 
-        let arguments = func_decl.get_arguments().unwrap();
-        let c_arg_types = arguments.iter()
-                                   .map(|x| x.get_type().unwrap().get_display_name())
-                                   .collect::<Vec<_>>();
+        // {{{ parse borrowing_rules
+
         let mut borrowing_rules: Vec<Option<ISLOwnership>> = vec![];
-        for arg in arguments {
-            let (start_loc, _) = get_start_end_locations(arg);
+        for arg in arguments.iter() {
+            let (start_loc, _) = get_start_end_locations(&arg);
             let qualifier_tok = idx_to_token[loc_to_idx[&start_loc] - 1];
             let borrow_rule = if qualifier_tok.get_kind() == TokenKind::Identifier {
                 match qualifier_tok.get_spelling().as_str() {
@@ -189,16 +235,38 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             borrowing_rules.push(borrow_rule);
         }
 
-        let ret_type = match func_decl.get_result_type() {
-            Some(x) => Some(x.get_display_name()),
-            None => None,
-        };
+        // }}}
 
-        println!("Return type = {:?}", ret_type);
-        println!("Parameter types = {:?}", c_arg_types);
-        println!("Borrowship rules = {:?}", borrowing_rules);
+        let c_arg_types = arguments.iter()
+                                   .map(|x| x.get_type().unwrap().get_display_name())
+                                   .collect::<Vec<_>>();
+        let c_arg_names = arguments.iter()
+                                   .map(|x| x.get_name().unwrap())
+                                   .collect::<Vec<_>>();
 
-        panic!("Abhi key liye bas bhai");
+        let ret_type = func_decl.get_result_type().map(|x| x.get_display_name());
+
+        let extern_func = Function { name: func_decl.get_name().unwrap(),
+                                     arg_names: c_arg_names.clone(),
+                                     arg_types: c_arg_types.clone()
+                                                           .into_iter()
+                                                           .map(|x| to_extern_arg_t(x))
+                                                           .collect(),
+                                     ret_type: ret_type.clone().map(|x| to_extern_arg_t(x)) };
+
+        let binding_func =
+            Function { name: get_rust_method_name(&func_decl, src_t),
+                       arg_names: c_arg_names,
+                       arg_types: std::iter::zip(c_arg_types, borrowing_rules).into_iter()
+                                                                              .map(|(x, brw)| {
+                                                                                  to_rust_arg_t(x,
+                                                                                                brw)
+                                                                              })
+                                                                              .collect(),
+                       ret_type: ret_type.map(|x| to_extern_arg_t(x)) };
+
+        external_functions.push(extern_func);
+        bindings_functions.push(binding_func);
     }
 
     (external_functions, bindings_functions)
@@ -227,7 +295,8 @@ fn implement_bindings(dst_t: &str, src_t: &str, _dst_file: &str, src_file: &str)
                                           == src_file.to_string()
                                    })
                                    .collect();
-    let (extern_funcs, binding_funcs) = get_extern_and_bindings_functions(func_decls, tokens);
+    let (extern_funcs, binding_funcs) =
+        get_extern_and_bindings_functions(func_decls, tokens, src_t);
 
     let mut scope = Scope::new();
 
