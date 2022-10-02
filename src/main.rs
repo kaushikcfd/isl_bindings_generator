@@ -600,7 +600,8 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
 
     scope.new_struct(dst_t)
          .field("pub ptr", "uintptr_t")
-         .vis("pub");
+         .vis("pub")
+         .doc(format!("Wraps `{}`.", src_t).as_str());
 
     // }}}
 
@@ -635,7 +636,9 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     assert_eq!(extern_funcs.len(), binding_funcs.len());
 
     for (extern_func, binding_func) in zip(extern_funcs, binding_funcs) {
-        let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str()).vis("pub");
+        let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str())
+                                  .vis("pub")
+                                  .doc(format!("Wraps `{}`.", extern_func.name).as_str());
         // FIXME: /!\ Big FIXME. This logic doesn't account
         let mut bnd_arg_names: Vec<String> = binding_func.arg_names.clone();
         let mut bnd_arg_types: Vec<String> = binding_func.arg_types.clone();
