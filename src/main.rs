@@ -548,11 +548,13 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
 
     for func in extern_funcs.iter().chain(binding_funcs.iter()) {
         match &func.ret_type {
-            Some(x) => import_type(&mut scope, x),
-            None => {}
+            Some(x) if x != dst_t && &x[1..] != dst_t => import_type(&mut scope, x),
+            _ => {}
         };
         for arg_t in func.arg_types.iter() {
-            import_type(&mut scope, arg_t);
+            if arg_t != dst_t && &arg_t[1..] != dst_t {
+                import_type(&mut scope, arg_t);
+            }
         }
     }
 
@@ -560,7 +562,9 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
 
     // {{{ Generate struct for dst_t
 
-    scope.new_struct(dst_t).field("ptr", "uintptr_t").vis("pub");
+    scope.new_struct(dst_t)
+         .field("pub ptr", "uintptr_t")
+         .vis("pub");
 
     // }}}
 
@@ -727,26 +731,47 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
 /// Populates `src/bindings/mod.rs` with isl types.
 fn generate_bindings_mod(dst_file: &str) {
     let mut scope = Scope::new();
-    scope.import("dim_type", "DimType").vis("pub");
-    scope.import("fixed_box", "FixedBox").vis("pub");
-    scope.import("stride_info", "StrideInfo").vis("pub");
 
-    scope.import("context", "Context").vis("pub");
-    scope.import("space", "Space").vis("pub");
-    scope.import("local_space", "LocalSpace").vis("pub");
-    scope.import("id", "Id").vis("pub");
-    scope.import("multi_id", "MultiId").vis("pub");
-    scope.import("val", "Val").vis("pub");
-    scope.import("multi_val", "MultiVal").vis("pub");
-    scope.import("point", "Point").vis("pub");
-    scope.import("mat", "Mat").vis("pub");
-    scope.import("vec", "Vec").vis("pub");
-    scope.import("basic_set", "BasicSet").vis("pub");
-    scope.import("set", "Set").vis("pub");
-    scope.import("basic_map", "BasicMap").vis("pub");
-    scope.import("map", "Map").vis("pub");
-    scope.import("aff", "Aff").vis("pub");
-    scope.import("pw_aff", "PwAff").vis("pub");
+    scope.raw("mod dim_type;");
+    scope.raw("mod fixed_box;");
+    scope.raw("mod stride_info;");
+    scope.raw("mod context;");
+    scope.raw("mod space;");
+    scope.raw("mod local_space;");
+    scope.raw("mod id;");
+    scope.raw("mod multi_id;");
+    scope.raw("mod val;");
+    scope.raw("mod multi_val;");
+    scope.raw("mod point;");
+    scope.raw("mod mat;");
+    scope.raw("mod vec;");
+    scope.raw("mod basic_set;");
+    scope.raw("mod set;");
+    scope.raw("mod basic_map;");
+    scope.raw("mod map;");
+    scope.raw("mod aff;");
+    scope.raw("mod pw_aff;");
+
+    scope.raw("pub use dim_type::DimType;");
+    scope.raw("pub use fixed_box::FixedBox;");
+    scope.raw("pub use stride_info::StrideInfo;");
+
+    scope.raw("pub use context::Context;");
+    scope.raw("pub use space::Space;");
+    scope.raw("pub use local_space::LocalSpace;");
+    scope.raw("pub use id::Id;");
+    scope.raw("pub use multi_id::MultiId;");
+    scope.raw("pub use val::Val;");
+    scope.raw("pub use multi_val::MultiVal;");
+    scope.raw("pub use point::Point;");
+    scope.raw("pub use mat::Mat;");
+    scope.raw("pub use vec::Vec;");
+    scope.raw("pub use basic_set::BasicSet;");
+    scope.raw("pub use set::Set;");
+    scope.raw("pub use basic_map::BasicMap;");
+    scope.raw("pub use map::Map;");
+    scope.raw("pub use aff::Aff;");
+    scope.raw("pub use pw_aff::PwAff;");
 
     // Write the generated code
     fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
