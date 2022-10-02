@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use std::fs;
 use std::iter::zip;
 use std::option::Option;
+use std::path::Path;
 
 lazy_static! {
     static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
@@ -723,11 +724,44 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
     fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
 }
 
+/// Populates `src/bindings/mod.rs` with isl types.
+fn generate_bindings_mod(dst_file: &str) {
+    let mut scope = Scope::new();
+    scope.import("dim_type", "DimType").vis("pub");
+    scope.import("fixed_box", "FixedBox").vis("pub");
+    scope.import("stride_info", "StrideInfo").vis("pub");
+
+    scope.import("context", "Context").vis("pub");
+    scope.import("space", "Space").vis("pub");
+    scope.import("local_space", "LocalSpace").vis("pub");
+    scope.import("id", "Id").vis("pub");
+    scope.import("multi_id", "MultiId").vis("pub");
+    scope.import("val", "Val").vis("pub");
+    scope.import("multi_val", "MultiVal").vis("pub");
+    scope.import("point", "Point").vis("pub");
+    scope.import("mat", "Mat").vis("pub");
+    scope.import("vec", "Vec").vis("pub");
+    scope.import("basic_set", "BasicSet").vis("pub");
+    scope.import("set", "Set").vis("pub");
+    scope.import("basic_map", "BasicMap").vis("pub");
+    scope.import("map", "Map").vis("pub");
+    scope.import("aff", "Aff").vis("pub");
+    scope.import("pw_aff", "PwAff").vis("pub");
+
+    // Write the generated code
+    fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
+}
+
 fn main() {
-    fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
+    if Path::new("src/bindings/").is_dir() {
+        fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
+    }
+
     fs::create_dir("src/bindings/").unwrap();
 
     define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
+
+    // {{{ emit bindings for primitive types
 
     implement_bindings("Context",
                        "isl_ctx",
@@ -744,11 +778,11 @@ fn main() {
     implement_bindings("Id", "isl_id", "src/bindings/id.rs", "isl/include/isl/id.h");
     implement_bindings("MultiId",
                        "isl_mutli_id",
-                       "src/bindings/id.rs",
+                       "src/bindings/multi_id.rs",
                        "isl/include/isl/id.h");
     implement_bindings("Val",
                        "isl_val",
-                       "src/bindings/val.rs",
+                       "src/bindings/multi_val.rs",
                        "isl/include/isl/val.h");
     implement_bindings("Point",
                        "isl_point",
@@ -794,6 +828,11 @@ fn main() {
                        "isl_fixed_box",
                        "src/bindings/fixed_box.rs",
                        "isl/include/isl/fixed_box.h");
+
+    // }}}
+
+    // add `uses` to src/bindings/mod.rs
+    generate_bindings_mod("src/bindings/mod.rs");
 }
 
 // vim:fdm=marker
