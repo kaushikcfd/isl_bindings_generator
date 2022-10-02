@@ -1,7 +1,7 @@
 [package]
 name = "isl_bindings_generator"
 authors = ["Kaushik Kulkarni <kaushikcfd@gmail.com>"]
-description = "Rust binding generator for Integer Set Library"
+description = "Rust bindings generator for Integer Set Library"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"

@@ -1,3 +1,23 @@
+// Copyright (c) 2022 Kaushik Kulkarni
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
 use clang;
 use clang::token::{Token, TokenKind};
 use codegen::Scope;
@@ -14,9 +34,7 @@ lazy_static! {
                        ("isl_space *", "Space"),
                        ("isl_local_space *", "LocalSpace"),
                        ("isl_id *", "Id"),
-                       ("isl_multi_id *", "MultiId"),
                        ("isl_val *", "Val"),
-                       ("isl_multi_val *", "MultiVal"),
                        ("isl_point *", "Point"),
                        ("isl_mat *", "Mat"),
                        ("isl_vec *", "Vec"),
@@ -33,9 +51,7 @@ lazy_static! {
                                                                       "isl_space *",
                                                                       "isl_local_space *",
                                                                       "isl_id *",
-                                                                      "isl_multi_id *",
                                                                       "isl_val *",
-                                                                      "isl_multi_val *",
                                                                       "isl_point *",
                                                                       "isl_mat *",
                                                                       "isl_vec *",
@@ -50,7 +66,14 @@ lazy_static! {
     static ref ISL_TYPES_RS: HashSet<&'static str> =
         HashSet::from_iter(C_TO_RS_BINDING.clone().into_values());
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
-        HashMap::from([("in", "in_")]);
+        HashMap::from([("in", "in_"),
+                       ("str", "str_"),
+                       ("type", "type_"),
+                       ("box", "box_"),
+                       ("ref", "incref"),
+                       ("mod", "mod_"),
+                       ("2exp", "to_exp"),
+                       ("match", "match_")]);
 
     // TODO: Once we reduce this set down to 0, we are done!
     static ref UNSUPPORTED_C_TYPES: HashSet<&'static str> =
@@ -78,6 +101,8 @@ lazy_static! {
                        "isl_multi_aff *",
                        "isl_multi_pw_aff *",
                        "isl_pw_multi_aff *",
+                       "isl_multi_val *",
+                        "isl_multi_id *",
         ]);
 
     // TODO: Once we reduce this set down to 0, we are done!
@@ -325,7 +350,7 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
             let var_name = var_name.to_string();
 
             match rs_ty_name.as_str() {
-                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "bool" | "DimType" => {}
+                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "DimType" => {}
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
@@ -336,6 +361,13 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
                     func.line(format!("let {} = unsafe {{ CStr::from_ptr({}) }};",
                                       var_name, var_name));
                     func.line(format!("let {} = {}.to_str().unwrap();", var_name, var_name));
+                }
+                "bool" => {
+                    func.line(format!("let {} = match {} {{", var_name, var_name));
+                    func.line("    0 => false,");
+                    func.line("    1 => true,");
+                    func.line("    _ => panic!(\"Got isl_bool = -1\"),");
+                    func.line("};");
                 }
                 _ => unimplemented!("{}", rs_ty_name),
             };
@@ -481,9 +513,11 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             println!("SKIPPPING {}", func_decl.get_name().unwrap());
             continue;
         }
-        let c_arg_names = arguments.iter()
-                                   .map(|x| x.get_name().unwrap())
-                                   .collect::<Vec<_>>();
+        let c_arg_names =
+            arguments.iter()
+                     .map(|x| x.get_name().unwrap())
+                     .map(|x| KEYWORD_TO_IDEN.get(x.as_str()).map_or(x, |y| y.to_string()))
+                     .collect::<Vec<_>>();
 
         let extern_func = Function { name: func_decl.get_name().unwrap(),
                                      arg_names: c_arg_names.clone(),
@@ -546,6 +580,8 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
 
     // {{{ Generate `use ...` statements.
 
+    // Always use uintptr_t as dst_t's struct requires it.
+    import_type(&mut scope, &"uintptr_t".to_string());
     for func in extern_funcs.iter().chain(binding_funcs.iter()) {
         match &func.ret_type {
             Some(x) if x != dst_t && &x[1..] != dst_t => import_type(&mut scope, x),
@@ -584,7 +620,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
         let ret_str = extern_func.ret_type
                                  .map_or("".to_string(), |x| format!(" -> {}", x));
 
-        scope.raw(format!("    {}({}){};", extern_func.name, args_str, ret_str));
+        scope.raw(format!("    fn {}({}){};", extern_func.name, args_str, ret_str));
     }
     scope.raw("}");
 
@@ -599,7 +635,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     assert_eq!(extern_funcs.len(), binding_funcs.len());
 
     for (extern_func, binding_func) in zip(extern_funcs, binding_funcs) {
-        let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str());
+        let mut impl_fn = dst_impl.new_fn(binding_func.name.as_str()).vis("pub");
         // FIXME: /!\ Big FIXME. This logic doesn't account
         let mut bnd_arg_names: Vec<String> = binding_func.arg_names.clone();
         let mut bnd_arg_types: Vec<String> = binding_func.arg_types.clone();
@@ -664,12 +700,14 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     drop_impl.impl_trait("Drop");
     drop_impl.new_fn("drop")
              .arg_mut_self()
-             .line(format!("unsafe {{ {}_free(self.ptr) }}", src_t));
+             .line(format!("unsafe {{ {}_free(self.ptr); }}", src_t));
 
     // }}}
 
     // Write the generated code
-    fs::write(dst_file, scope.to_string()).expect(format!("error writing to {} file.", dst_file)
+    fs::write(dst_file,
+              format!("// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n\n{}", scope.to_string())
+              ).expect(format!("error writing to {} file.", dst_file)
                                                   .as_str());
 }
 
@@ -715,17 +753,23 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
 
     let mut scope = Scope::new();
     let dim_type_enum = scope.new_enum(C_TO_RS_BINDING["enum isl_dim_type"])
+                             .vis("pub")
                              .repr("C")
-                             .derive("Display")
                              .derive("Debug")
                              .derive("Clone");
     for c_variant_name in c_variant_names {
-        let name_in_rust = c_variant_name[8..].to_string();
+        let name_in_rust = c_variant_name[8..].to_string(); // 8 = len("isl_dim_")
+                                                            // convert variant name to camel case
+        let name_in_rust = format!("{}{}",
+                                   &name_in_rust[..1].to_uppercase(),
+                                   &name_in_rust[1..]);
         dim_type_enum.new_variant(guard_identifier(name_in_rust));
     }
 
     // Write the generated code
-    fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
+    fs::write(dst_file,
+              format!("// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n{}", scope.to_string())
+              ).expect("error writing to dim_type file");
 }
 
 /// Populates `src/bindings/mod.rs` with isl types.
@@ -739,15 +783,15 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("mod space;");
     scope.raw("mod local_space;");
     scope.raw("mod id;");
-    scope.raw("mod multi_id;");
+    // scope.raw("mod multi_id;");
     scope.raw("mod val;");
-    scope.raw("mod multi_val;");
+    // scope.raw("mod multi_val;");
     scope.raw("mod point;");
     scope.raw("mod mat;");
     scope.raw("mod vec;");
-    scope.raw("mod basic_set;");
+    scope.raw("mod bset;");
     scope.raw("mod set;");
-    scope.raw("mod basic_map;");
+    scope.raw("mod bmap;");
     scope.raw("mod map;");
     scope.raw("mod aff;");
     scope.raw("mod pw_aff;");
@@ -760,15 +804,15 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("pub use space::Space;");
     scope.raw("pub use local_space::LocalSpace;");
     scope.raw("pub use id::Id;");
-    scope.raw("pub use multi_id::MultiId;");
+    // scope.raw("pub use multi_id::MultiId;");
     scope.raw("pub use val::Val;");
-    scope.raw("pub use multi_val::MultiVal;");
+    // scope.raw("pub use multi_val::MultiVal;");
     scope.raw("pub use point::Point;");
     scope.raw("pub use mat::Mat;");
     scope.raw("pub use vec::Vec;");
-    scope.raw("pub use basic_set::BasicSet;");
+    scope.raw("pub use bset::BasicSet;");
     scope.raw("pub use set::Set;");
-    scope.raw("pub use basic_map::BasicMap;");
+    scope.raw("pub use bmap::BasicMap;");
     scope.raw("pub use map::Map;");
     scope.raw("pub use aff::Aff;");
     scope.raw("pub use pw_aff::PwAff;");
@@ -801,13 +845,9 @@ fn main() {
                        "src/bindings/local_space.rs",
                        "isl/include/isl/local_space.h");
     implement_bindings("Id", "isl_id", "src/bindings/id.rs", "isl/include/isl/id.h");
-    implement_bindings("MultiId",
-                       "isl_mutli_id",
-                       "src/bindings/multi_id.rs",
-                       "isl/include/isl/id.h");
     implement_bindings("Val",
                        "isl_val",
-                       "src/bindings/multi_val.rs",
+                       "src/bindings/val.rs",
                        "isl/include/isl/val.h");
     implement_bindings("Point",
                        "isl_point",
