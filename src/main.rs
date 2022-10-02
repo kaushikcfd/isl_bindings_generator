@@ -400,6 +400,10 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             let qualifier = idx_to_token[start_idx - 1];
             if qualifier.get_kind() == TokenKind::Punctuation {
                 (false, false)
+            } else if qualifier.get_spelling() == "endif"
+                      || qualifier.get_spelling() == "__isl_keep"
+            {
+                (false, false)
             } else if qualifier.get_kind() == TokenKind::Comment {
                 (false, false)
             } else {
@@ -703,6 +707,10 @@ fn main() {
                        "isl_ctx",
                        "src/bindings/context.rs",
                        "isl/include/isl/ctx.h");
+    implement_bindings("Space",
+                       "isl_space",
+                       "src/bindings/space.rs",
+                       "isl/include/isl/space.h");
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
