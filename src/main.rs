@@ -6,7 +6,6 @@ use lazy_static::lazy_static;
 use std::fs;
 use std::iter::zip;
 use std::option::Option;
-use std::path::Path;
 
 lazy_static! {
     static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
@@ -14,7 +13,10 @@ lazy_static! {
                        ("isl_space *", "Space"),
                        ("isl_local_space *", "LocalSpace"),
                        ("isl_id *", "Id"),
+                       ("isl_multi_id *", "MultiId"),
+                       ("isl_id_list *", "IdList"),
                        ("isl_val *", "Val"),
+                       ("isl_multi_val *", "MultiVal"),
                        ("isl_point *", "Point"),
                        ("isl_mat *", "Mat"),
                        ("isl_basic_set *", "BasicSet"),
@@ -26,12 +28,19 @@ lazy_static! {
                        ("isl_aff *", "Aff"),
                        ("isl_pw_aff *", "PwAff"),
                        ("isl_multi_aff *", "MultiAff"),
+                       ("isl_multi_pw_aff *", "MultiPwAff"),
+                       ("isl_pw_multi_aff *", "PwMultiAff"),
+                       ("isl_stride_info *", "StrideInfo"),
+                       ("isl_fixed_box *", "FixedBox"),
                        ("enum isl_dim_type", "DimType")]);
     static ref ISL_CORE_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
                                                                       "isl_space *",
                                                                       "isl_local_space *",
                                                                       "isl_id *",
+                                                                      "isl_multi_id *",
+                                                                      "isl_id_list *",
                                                                       "isl_val *",
+                                                                      "isl_multi_val *",
                                                                       "isl_point *",
                                                                       "isl_mat *",
                                                                       "isl_basic_set *",
@@ -42,7 +51,11 @@ lazy_static! {
                                                                       "isl_map *",
                                                                       "isl_aff *",
                                                                       "isl_pw_aff *",
-                                                                      "isl_multi_aff *",]);
+                                                                      "isl_multi_aff *",
+                                                                      "isl_multi_pw_aff *",
+                                                                      "isl_pw_multi_aff *",
+                                                                      "isl_stride_info *",
+                                                                      "isl_fixed_box *",]);
     static ref ISL_TYPES_RS: HashSet<&'static str> =
         HashSet::from_iter(C_TO_RS_BINDING.clone().into_values());
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
@@ -150,7 +163,13 @@ fn is_type_not_supported(c_arg_t: &String) -> bool {
         true
     } else if c_arg_t == "isl_set **" {
         true
+    } else if c_arg_t == "isl_val **" {
+        true
     } else if c_arg_t == "int *" {
+        true
+    } else if c_arg_t == "isl_stat (*)(isl_basic_set *, void *)" {
+        true
+    } else if c_arg_t == "isl_stat (*)(isl_point *, void *)" {
         true
     } else {
         false
@@ -178,8 +197,8 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
         "*const c_char"
     } else if c_arg_t == "int" {
         "i32"
-    } else if c_arg_t == "unsigned int" {
-        "i32"
+    } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
+        "u32"
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     };
@@ -226,7 +245,7 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         "&str".to_string()
     } else if c_arg_t == "int" {
         "i32".to_string()
-    } else if c_arg_t == "unsigned int" {
+    } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
         "u32".to_string()
     } else {
         panic!("Unexpected type: {}", c_arg_t)
@@ -368,7 +387,8 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
                 assert_eq!(qualifier2.get_kind(), TokenKind::Punctuation);
                 (false, true)
             } else {
-                assert_eq!(qualifier1.get_spelling(), "__isl_constructor");
+                assert!(qualifier1.get_spelling() == "__isl_constructor"
+                        || qualifier1.get_spelling() == "__isl_overload");
                 assert_eq!(qualifier2.get_kind(), TokenKind::Punctuation);
                 (true, false)
             }
@@ -665,9 +685,8 @@ fn define_dim_type_enum(dst_file: &str, src_file: &str) {
 }
 
 fn main() {
-    if !Path::new("src/bindings/").is_dir() {
-        fs::create_dir("src/bindings/").unwrap();
-    }
+    fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
+    fs::create_dir("src/bindings/").unwrap();
 
     define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
 
@@ -675,11 +694,10 @@ fn main() {
                        "isl_basic_set",
                        "src/bindings/bset.rs",
                        "isl/include/isl/set.h");
-    // FIXME: Disabling this leads to a panic!
-    // implement_bindings("Set",
-    //                    "isl_set",
-    //                    "src/bindings/set.rs",
-    //                    "isl/include/isl/set.h");
+    implement_bindings("Set",
+                       "isl_set",
+                       "src/bindings/set.rs",
+                       "isl/include/isl/set.h");
 }
 
 // vim:fdm=marker
