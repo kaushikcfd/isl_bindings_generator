@@ -60,6 +60,20 @@ lazy_static! {
         HashSet::from_iter(C_TO_RS_BINDING.clone().into_values());
     static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_")]);
+
+    // TODO: Once we reduce this set down to 0, we are done!
+    static ref UNSUPPORTED_C_TYPES: HashSet<&'static str> =
+        HashSet::from(["FILE *", "const FILE *",
+                       "isl_set **",
+                       "isl_val **",
+                       "int *",
+                       "isl_stat (*)(isl_basic_set *, void *)",
+                       "isl_stat (*)(isl_point *, void *)",
+                       "struct isl_options *",
+                       "void *",
+                       "char **",
+                       "enum isl_error",
+        ]);
 }
 
 /// Returns the lexicographic ordering of `x` and `y`.
@@ -156,24 +170,7 @@ fn is_isl_type(c_arg_t: &impl ToString) -> bool {
 /// [`isl_bindings_generator`].
 fn is_type_not_supported(c_arg_t: &String) -> bool {
     let c_arg_t = &c_arg_t[..];
-
-    if c_arg_t == "FILE *" {
-        true
-    } else if c_arg_t == "const FILE *" {
-        true
-    } else if c_arg_t == "isl_set **" {
-        true
-    } else if c_arg_t == "isl_val **" {
-        true
-    } else if c_arg_t == "int *" {
-        true
-    } else if c_arg_t == "isl_stat (*)(isl_basic_set *, void *)" {
-        true
-    } else if c_arg_t == "isl_stat (*)(isl_point *, void *)" {
-        true
-    } else {
-        false
-    }
+    UNSUPPORTED_C_TYPES.contains(c_arg_t)
 }
 
 /// Returns the name for `c_arg_t` to use in `extern "C"` block function
@@ -199,6 +196,8 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
         "i32"
     } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
         "u32"
+    } else if c_arg_t == "unsigned long" {
+        "u64"
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     };
@@ -221,14 +220,7 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         };
         let c_arg_t = c_arg_t.as_str();
 
-        let ownership = if c_arg_t == "isl_ctx *" {
-            // isl_ctx is always kept
-            ISLOwnership::Keep
-        } else {
-            ownership.unwrap()
-        };
-
-        match ownership {
+        match ownership.unwrap() {
             ISLOwnership::Keep => format!("&{}", C_TO_RS_BINDING[c_arg_t]),
             ISLOwnership::Take => C_TO_RS_BINDING[c_arg_t].to_string(),
         }
@@ -247,6 +239,8 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         "i32".to_string()
     } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
         "u32".to_string()
+    } else if c_arg_t == "unsigned long" {
+        "u64".to_string()
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     }
@@ -260,7 +254,7 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
         "uintptr_t" => {
             scope.import("libc", "uintptr_t");
         }
-        "i32" | "u32" | "bool" => {}
+        "i32" | "u32" | "bool" | "u64" => {}
         "&str" => {
             scope.import("std::ffi", "CString");
             scope.import("std::ffi", "CStr");
@@ -287,7 +281,7 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
     let var_name = var_name.to_string();
 
     match rs_ty_name {
-        "i32" | "u32" | "bool" | "DimType" => {}
+        "i32" | "u32" | "bool" | "u64" | "DimType" => {}
         "&str" => {
             func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
             func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
@@ -310,7 +304,7 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
             let var_name = var_name.to_string();
 
             match rs_ty_name.as_str() {
-                "i32" | "u32" | "bool" | "DimType" => {}
+                "i32" | "u32" | "u64" | "bool" | "DimType" => {}
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
@@ -349,7 +343,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
     let (loc_to_idx, idx_to_token) = get_tokens_sorted_by_occurence(tokens);
 
     for func_decl in func_decls {
-        // println!("Traversing {}", func_decl.get_name().unwrap());
+        println!("Traversing {}", func_decl.get_name().unwrap());
         let arguments = func_decl.get_arguments().unwrap();
         let (start_loc, end_loc) = get_start_end_locations(&func_decl);
         let (start_idx, end_idx) = (loc_to_idx[&start_loc], loc_to_idx[&end_loc]);
@@ -359,6 +353,8 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
 
         let (isl_null, isl_give) =
             if idx_to_token[start_idx - 1].get_kind() == TokenKind::Punctuation {
+                (false, false)
+            } else if idx_to_token[start_idx - 1].get_kind() == TokenKind::Comment {
                 (false, false)
             } else {
                 let qualifier_1 = idx_to_token[start_idx - 1];
@@ -404,6 +400,8 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             let qualifier = idx_to_token[start_idx - 1];
             if qualifier.get_kind() == TokenKind::Punctuation {
                 (false, false)
+            } else if qualifier.get_kind() == TokenKind::Comment {
+                (false, false)
             } else {
                 assert_eq!(qualifier.get_spelling(), "__isl_export");
                 assert!((idx_to_token[start_idx - 2].get_kind() == TokenKind::Punctuation)
@@ -427,6 +425,11 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
                     "__isl_give" => None, // FIXME
                     x => panic!("Unknown ownership rule {}", x),
                 }
+            } else if arg.get_type().unwrap().get_display_name() == "isl_ctx *"
+                      || arg.get_type().unwrap().get_display_name() == "struct isl_ctx *"
+            {
+                // isl_ctx is always kept
+                Some(ISLOwnership::Keep)
             } else {
                 assert_eq!(qualifier_tok.get_kind(), TokenKind::Punctuation);
                 None
@@ -440,17 +443,20 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
         let c_arg_types = arguments.iter()
                                    .map(|x| x.get_type().unwrap().get_display_name())
                                    .collect::<Vec<_>>();
+        let ret_type = func_decl.get_result_type()
+                                .map(|x| x.get_display_name())
+                                .filter(|x| x != "void");
 
-        if c_arg_types.iter().any(|x| is_type_not_supported(x)) {
+        if c_arg_types.iter().any(|x| is_type_not_supported(x))
+           || ret_type.clone()
+                      .map_or(false, |x| is_type_not_supported(&x))
+        {
             println!("SKIPPPING {}", func_decl.get_name().unwrap());
             continue;
         }
         let c_arg_names = arguments.iter()
                                    .map(|x| x.get_name().unwrap())
                                    .collect::<Vec<_>>();
-
-        let ret_type = func_decl.get_result_type().map(|x| x.get_display_name());
-        let ret_type = ret_type.filter(|x| x != "void");
 
         let extern_func = Function { name: func_decl.get_name().unwrap(),
                                      arg_names: c_arg_names.clone(),
@@ -476,6 +482,9 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
     (external_functions, bindings_functions)
 }
 
+/// Generates Rust bindings for type `dst_t` from the C-struct `src_t`. Searches
+/// for functions within `src_file` and the generated code is written to
+/// `dst_file`.
 fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) {
     let clang = clang::Clang::new().unwrap();
     let index = clang::Index::new(&clang, false, true);
@@ -562,13 +571,13 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
         let mut arg_names_in_fn_body: Vec<String> = vec![];
 
         // emit first argument to the method
-        if bnd_arg_types[0] == format!("&{}", dst_t) {
+        if bnd_arg_types.len() != 0 && bnd_arg_types[0] == format!("&{}", dst_t) {
             // consume the first argument
             impl_fn = impl_fn.arg_ref_self();
             bnd_arg_names = bnd_arg_names[1..].to_vec();
             bnd_arg_types = bnd_arg_types[1..].to_vec();
             arg_names_in_fn_body.push("self".to_string());
-        } else if bnd_arg_types[0] == dst_t {
+        } else if bnd_arg_types.len() != 0 && bnd_arg_types[0] == dst_t {
             // consume the first argument
             impl_fn = impl_fn.arg_self();
             bnd_arg_names = bnd_arg_names[1..].to_vec();
@@ -690,6 +699,10 @@ fn main() {
 
     define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
 
+    implement_bindings("Context",
+                       "isl_ctx",
+                       "src/bindings/context.rs",
+                       "isl/include/isl/ctx.h");
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
