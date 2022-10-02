@@ -71,6 +71,7 @@ lazy_static! {
                        "isl_stat (*)(isl_point *, void *)",
                        "struct isl_options *",
                        "void *",
+                       "void (*)(void *)",
                        "char **",
                        "enum isl_error",
         ]);
@@ -344,10 +345,10 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
 
     for func_decl in func_decls {
         println!("Traversing {}", func_decl.get_name().unwrap());
+
         let arguments = func_decl.get_arguments().unwrap();
-        let (start_loc, end_loc) = get_start_end_locations(&func_decl);
-        let (start_idx, end_idx) = (loc_to_idx[&start_loc], loc_to_idx[&end_loc]);
-        assert!(start_idx <= end_idx);
+        let (start_loc, _) = get_start_end_locations(&func_decl);
+        let start_idx = loc_to_idx[&start_loc];
 
         // {{{ parse __isl_null, __isl_give
 
@@ -434,6 +435,8 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             {
                 // isl_ctx is always kept
                 Some(ISLOwnership::Keep)
+            } else if func_decl.get_name().unwrap().ends_with("_copy") {
+                Some(ISLOwnership::Keep)
             } else {
                 assert_eq!(qualifier_tok.get_kind(), TokenKind::Punctuation);
                 None
@@ -494,7 +497,6 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     let index = clang::Index::new(&clang, false, true);
     let t_unit = index.parser(src_file)
                       .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
-                      .detailed_preprocessing_record(true)
                       .parse()
                       .unwrap();
     let tokens = t_unit.get_entity().get_range().unwrap().tokenize();
@@ -507,6 +509,10 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
                                        e.get_kind() == clang::EntityKind::FunctionDecl
                                        && e.get_name().is_some()
                                        && e.get_name().unwrap().starts_with(src_t)
+                                       // match isl_set, but not isl_set_list
+                                       && ! e.get_name().unwrap().starts_with(format!("{}_list", src_t).as_str())
+                                       // FIXME: to_list functions have unfavorable tokens
+                                       && e.get_name().unwrap() != format!("{}_to_list", src_t)
                                        && e.get_location().is_some()
                                        && e.get_location().unwrap().get_presumed_location().0
                                           == src_file.to_string()
@@ -711,6 +717,11 @@ fn main() {
                        "isl_space",
                        "src/bindings/space.rs",
                        "isl/include/isl/space.h");
+    implement_bindings("LocalSpace",
+                       "isl_local_space",
+                       "src/bindings/local_space.rs",
+                       "isl/include/isl/local_space.h");
+    implement_bindings("Id", "isl_id", "src/bindings/id.rs", "isl/include/isl/id.h");
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
