@@ -14,22 +14,17 @@ lazy_static! {
                        ("isl_local_space *", "LocalSpace"),
                        ("isl_id *", "Id"),
                        ("isl_multi_id *", "MultiId"),
-                       ("isl_id_list *", "IdList"),
                        ("isl_val *", "Val"),
                        ("isl_multi_val *", "MultiVal"),
                        ("isl_point *", "Point"),
                        ("isl_mat *", "Mat"),
+                       ("isl_vec *", "Vec"),
                        ("isl_basic_set *", "BasicSet"),
-                       ("isl_basic_set_list *", "BasicSetList"),
                        ("isl_set *", "Set"),
-                       ("isl_set_list *", "SetList"),
                        ("isl_basic_map *", "BasicMap"),
                        ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
                        ("isl_pw_aff *", "PwAff"),
-                       ("isl_multi_aff *", "MultiAff"),
-                       ("isl_multi_pw_aff *", "MultiPwAff"),
-                       ("isl_pw_multi_aff *", "PwMultiAff"),
                        ("isl_stride_info *", "StrideInfo"),
                        ("isl_fixed_box *", "FixedBox"),
                        ("enum isl_dim_type", "DimType")]);
@@ -38,22 +33,17 @@ lazy_static! {
                                                                       "isl_local_space *",
                                                                       "isl_id *",
                                                                       "isl_multi_id *",
-                                                                      "isl_id_list *",
                                                                       "isl_val *",
                                                                       "isl_multi_val *",
                                                                       "isl_point *",
                                                                       "isl_mat *",
+                                                                      "isl_vec *",
                                                                       "isl_basic_set *",
-                                                                      "isl_basic_set_list *",
                                                                       "isl_set *",
-                                                                      "isl_set_list *",
                                                                       "isl_basic_map *",
                                                                       "isl_map *",
                                                                       "isl_aff *",
                                                                       "isl_pw_aff *",
-                                                                      "isl_multi_aff *",
-                                                                      "isl_multi_pw_aff *",
-                                                                      "isl_pw_multi_aff *",
                                                                       "isl_stride_info *",
                                                                       "isl_fixed_box *",]);
     static ref ISL_TYPES_RS: HashSet<&'static str> =
@@ -67,14 +57,31 @@ lazy_static! {
                        "isl_set **",
                        "isl_val **",
                        "int *",
+                       "isl_bool *",
                        "isl_stat (*)(isl_basic_set *, void *)",
                        "isl_stat (*)(isl_point *, void *)",
                        "struct isl_options *",
                        "void *",
+                       "const void *",
                        "void (*)(void *)",
                        "char **",
+                       "isl_mat **",
                        "enum isl_error",
+                       "isl_id_list *",
+                       "isl_basic_set_list *",
+                       "isl_basic_map_list *",
+                       "isl_set_list *",
+                       "isl_map_list *",
+                       "isl_aff_list *",
+                       "isl_union_pw_aff *",
+                       "isl_multi_aff *",
+                       "isl_multi_pw_aff *",
+                       "isl_pw_multi_aff *",
         ]);
+
+    // TODO: Once we reduce this set down to 0, we are done!
+    static ref UNSUPPORTED_FUNCS: HashSet<&'static str> =
+        HashSet::from([]);
 }
 
 /// Returns the lexicographic ordering of `x` and `y`.
@@ -195,10 +202,16 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
         "*const c_char"
     } else if c_arg_t == "int" {
         "i32"
+    } else if c_arg_t == "long" {
+        "i64"
     } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
         "u32"
     } else if c_arg_t == "unsigned long" {
         "u64"
+    } else if c_arg_t == "size_t" {
+        "usize"
+    } else if c_arg_t == "double" {
+        "f64"
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     };
@@ -238,10 +251,16 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
         "&str".to_string()
     } else if c_arg_t == "int" {
         "i32".to_string()
+    } else if c_arg_t == "long" {
+        "i64".to_string()
     } else if c_arg_t == "unsigned int" || c_arg_t == "uint32_t" {
         "u32".to_string()
     } else if c_arg_t == "unsigned long" {
         "u64".to_string()
+    } else if c_arg_t == "size_t" {
+        "usize".to_string()
+    } else if c_arg_t == "double" {
+        "f64".to_string()
     } else {
         panic!("Unexpected type: {}", c_arg_t)
     }
@@ -255,7 +274,7 @@ fn import_type(scope: &mut Scope, ty_name: &String) {
         "uintptr_t" => {
             scope.import("libc", "uintptr_t");
         }
-        "i32" | "u32" | "bool" | "u64" => {}
+        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" => {}
         "&str" => {
             scope.import("std::ffi", "CString");
             scope.import("std::ffi", "CStr");
@@ -282,7 +301,7 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
     let var_name = var_name.to_string();
 
     match rs_ty_name {
-        "i32" | "u32" | "bool" | "u64" | "DimType" => {}
+        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" | "DimType" => {}
         "&str" => {
             func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
             func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
@@ -305,7 +324,7 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
             let var_name = var_name.to_string();
 
             match rs_ty_name.as_str() {
-                "i32" | "u32" | "u64" | "bool" | "DimType" => {}
+                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "bool" | "DimType" => {}
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
@@ -344,8 +363,7 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
     let (loc_to_idx, idx_to_token) = get_tokens_sorted_by_occurence(tokens);
 
     for func_decl in func_decls {
-        println!("Traversing {}", func_decl.get_name().unwrap());
-
+        // println!("Traversing {}", func_decl.get_name().unwrap());
         let arguments = func_decl.get_arguments().unwrap();
         let (start_loc, _) = get_start_end_locations(&func_decl);
         let start_idx = loc_to_idx[&start_loc];
@@ -386,7 +404,8 @@ fn get_extern_and_bindings_functions(func_decls: Vec<clang::Entity>, tokens: Vec
             } else {
                 assert!(qualifier1.get_spelling() == "__isl_constructor"
                         || qualifier1.get_spelling() == "__isl_overload");
-                assert_eq!(qualifier2.get_kind(), TokenKind::Punctuation);
+                assert!(qualifier2.get_kind() == TokenKind::Punctuation
+                        || qualifier2.get_spelling() == "endif");
                 (true, false)
             }
         } else if isl_null {
@@ -513,6 +532,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
                                        && ! e.get_name().unwrap().starts_with(format!("{}_list", src_t).as_str())
                                        // FIXME: to_list functions have unfavorable tokens
                                        && e.get_name().unwrap() != format!("{}_to_list", src_t)
+                                       && ! UNSUPPORTED_FUNCS.contains(e.get_name().unwrap().as_str())
                                        && e.get_location().is_some()
                                        && e.get_location().unwrap().get_presumed_location().0
                                           == src_file.to_string()
@@ -722,6 +742,26 @@ fn main() {
                        "src/bindings/local_space.rs",
                        "isl/include/isl/local_space.h");
     implement_bindings("Id", "isl_id", "src/bindings/id.rs", "isl/include/isl/id.h");
+    implement_bindings("MultiId",
+                       "isl_mutli_id",
+                       "src/bindings/id.rs",
+                       "isl/include/isl/id.h");
+    implement_bindings("Val",
+                       "isl_val",
+                       "src/bindings/val.rs",
+                       "isl/include/isl/val.h");
+    implement_bindings("Point",
+                       "isl_point",
+                       "src/bindings/point.rs",
+                       "isl/include/isl/point.h");
+    implement_bindings("Mat",
+                       "isl_mat",
+                       "src/bindings/mat.rs",
+                       "isl/include/isl/mat.h");
+    implement_bindings("Vec",
+                       "isl_vec",
+                       "src/bindings/vec.rs",
+                       "isl/include/isl/vec.h");
     implement_bindings("BasicSet",
                        "isl_basic_set",
                        "src/bindings/bset.rs",
@@ -730,6 +770,30 @@ fn main() {
                        "isl_set",
                        "src/bindings/set.rs",
                        "isl/include/isl/set.h");
+    implement_bindings("BasicMap",
+                       "isl_basic_map",
+                       "src/bindings/bmap.rs",
+                       "isl/include/isl/map.h");
+    implement_bindings("Map",
+                       "isl_map",
+                       "src/bindings/map.rs",
+                       "isl/include/isl/map.h");
+    implement_bindings("Aff",
+                       "isl_aff",
+                       "src/bindings/aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("PwAff",
+                       "isl_pw_aff",
+                       "src/bindings/pw_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("StrideInfo",
+                       "isl_stride_info",
+                       "src/bindings/stride_info.rs",
+                       "isl/include/isl/stride_info.h");
+    implement_bindings("FixedBox",
+                       "isl_fixed_box",
+                       "src/bindings/fixed_box.rs",
+                       "isl/include/isl/fixed_box.h");
 }
 
 // vim:fdm=marker
