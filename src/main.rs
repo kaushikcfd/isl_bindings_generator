@@ -332,9 +332,12 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
             func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
             func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
         }
-        x if (ISL_TYPES_RS.contains(x)
-              || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
-        {
+        x if ISL_TYPES_RS.contains(x) => {
+            func.line(format!("let mut {} = {};", var_name, var_name));
+            func.line(format!("{}.do_not_free_on_drop();", var_name));
+            func.line(format!("let {} = {}.ptr;", var_name, var_name));
+        }
+        x if (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..])) => {
             func.line(format!("let {} = {}.ptr;", var_name, var_name));
         }
         _ => unimplemented!("{}", rs_ty_name),
@@ -354,7 +357,7 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
-                    func.line(format!("let {} = {} {{ ptr: {} }};",
+                    func.line(format!("let {} = {} {{ ptr: {}, should_free_on_drop: true }};",
                                       var_name, rs_ty_name, var_name));
                 }
                 "&str" => {
@@ -600,6 +603,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
 
     scope.new_struct(dst_t)
          .field("pub ptr", "uintptr_t")
+         .field("pub should_free_on_drop", "bool")
          .vis("pub")
          .doc(format!("Wraps `{}`.", src_t).as_str());
 
@@ -690,10 +694,32 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
         impl_fn.line(format!("let isl_rs_result = unsafe {{ {}({}) }};",
                              extern_func.name, passed_args_str));
 
-        postprocess_var_from_extern_func(&mut impl_fn, binding_func.ret_type, "isl_rs_result");
+        postprocess_var_from_extern_func(&mut impl_fn,
+                                         binding_func.ret_type.clone(),
+                                         "isl_rs_result");
+
+        // {{{ Do not free isl_ctx* if not from isl_ctx_alloc.
+
+        match binding_func.ret_type {
+            Some(x)
+                if (x == C_TO_RS_BINDING["isl_ctx *"] && extern_func.name != "isl_ctx_alloc") =>
+            {
+                impl_fn.line("let mut isl_rs_result = isl_rs_result;");
+                impl_fn.line("isl_rs_result.do_not_free_on_drop();");
+            }
+            _ => {}
+        };
+
+        // }}}
 
         impl_fn.line("isl_rs_result");
     }
+
+    dst_impl.new_fn("do_not_free_on_drop")
+            .vis("pub")
+            .doc("Does not call isl_xxx_free() on being dropped. (For internal use only.)")
+            .arg_mut_self()
+            .line("self.should_free_on_drop = false;");
 
     // }}}
 
@@ -703,7 +729,9 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     drop_impl.impl_trait("Drop");
     drop_impl.new_fn("drop")
              .arg_mut_self()
-             .line(format!("unsafe {{ {}_free(self.ptr); }}", src_t));
+             .line("if self.should_free_on_drop {")
+             .line(format!("    unsafe {{ {}_free(self.ptr); }}", src_t))
+             .line("}");
 
     // }}}
 
