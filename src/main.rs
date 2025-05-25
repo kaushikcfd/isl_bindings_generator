@@ -28,7 +28,13 @@ use std::iter::zip;
 use std::option::Option;
 use std::path::Path;
 
+static CLANG_ARGS: [&'static str; 4] = ["-I",
+                                        "isl/include/",
+                                        "-I",
+                                        "/usr/lib/llvm-19/lib/clang/19/include/"];
+
 lazy_static! {
+
     static ref C_TO_RS_BINDING: HashMap<&'static str, &'static str> =
         HashMap::from([("isl_ctx *", "Context"),
                        ("isl_space *", "Space"),
@@ -39,33 +45,25 @@ lazy_static! {
                        ("isl_mat *", "Mat"),
                        ("isl_vec *", "Vec"),
                        ("isl_basic_set *", "BasicSet"),
+                       ("isl_constraint *", "Constraint"),
                        ("isl_set *", "Set"),
+                       ("isl_term *", "Term"),
                        ("isl_basic_map *", "BasicMap"),
                        ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
                        ("isl_pw_aff *", "PwAff"),
+                       ("isl_qpolynomial *", "QPolynomial"),
+                       ("isl_pw_qpolynomial *", "PwQpolynomial"),
+                       ("isl_qpolynomial_fold *", "QPolynomialFold"),
+                       ("isl_pw_qpolynomial_fold *", "PwQPolynomialFold"),
                        ("isl_stride_info *", "StrideInfo"),
                        ("isl_fixed_box *", "FixedBox"),
-                       ("enum isl_dim_type", "DimType")]);
-    static ref ISL_CORE_TYPES: HashSet<&'static str> = HashSet::from(["isl_ctx *",
-                                                                      "isl_space *",
-                                                                      "isl_local_space *",
-                                                                      "isl_id *",
-                                                                      "isl_val *",
-                                                                      "isl_point *",
-                                                                      "isl_mat *",
-                                                                      "isl_vec *",
-                                                                      "isl_basic_set *",
-                                                                      "isl_set *",
-                                                                      "isl_basic_map *",
-                                                                      "isl_map *",
-                                                                      "isl_aff *",
-                                                                      "isl_pw_aff *",
-                                                                      "isl_stride_info *",
-                                                                      "isl_fixed_box *",]);
-    static ref ISL_TYPES_RS: HashSet<&'static str> =
-        HashSet::from_iter(C_TO_RS_BINDING.clone().into_values());
-    static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
+                       ("enum isl_dim_type", "DimType"),
+                       ("enum isl_fold", "Fold")
+                       ]);
+   static ref ISL_CORE_TYPES: HashSet<&'static str> = C_TO_RS_BINDING.keys().filter(|k| !k.starts_with("enum isl_")).copied().collect();
+   static ref ISL_TYPES_RS: HashSet<&'static str> = C_TO_RS_BINDING.values().copied().collect();
+   static ref KEYWORD_TO_IDEN: HashMap<&'static str, &'static str> =
         HashMap::from([("in", "in_"),
                        ("str", "str_"),
                        ("type", "type_"),
@@ -84,7 +82,7 @@ lazy_static! {
                        "isl_bool *",
                        "isl_stat (*)(isl_basic_set *, void *)",
                        "isl_stat (*)(isl_point *, void *)",
-                       "struct isl_options *",
+                       "isl_options *",
                        "void *",
                        "const void *",
                        "void (*)(void *)",
@@ -102,7 +100,11 @@ lazy_static! {
                        "isl_multi_pw_aff *",
                        "isl_pw_multi_aff *",
                        "isl_multi_val *",
-                        "isl_multi_id *",
+                       "isl_multi_id *",
+                       "isl_union_pw_qpolynomial *",
+                       "isl_union_pw_qpolynomial_fold *",
+                       "isl_pw_qpolynomial_fold_list *",
+                       "isl_qpolynomial **",
         ]);
 
     // TODO: Once we reduce this set down to 0, we are done!
@@ -204,13 +206,19 @@ fn is_isl_type(c_arg_t: &impl ToString) -> bool {
 /// [`isl_bindings_generator`].
 fn is_type_not_supported(c_arg_t: &String) -> bool {
     let c_arg_t = &c_arg_t[..];
-    UNSUPPORTED_C_TYPES.contains(c_arg_t)
+    let new_c_arg_t = if c_arg_t.starts_with("struct ") {
+        c_arg_t[7..].to_string()
+    } else {
+        c_arg_t.to_string()
+    };
+
+    UNSUPPORTED_C_TYPES.contains(new_c_arg_t.as_str())
 }
 
 /// Returns the name for `c_arg_t` to use in `extern "C"` block function
 /// declarations.
 fn to_extern_arg_t(c_arg_t: String) -> String {
-    let extern_t = if c_arg_t == "enum isl_dim_type" {
+    let extern_t = if c_arg_t == "enum isl_dim_type" || c_arg_t == "enum isl_fold" {
         C_TO_RS_BINDING[c_arg_t.as_str()]
     } else if is_isl_type(&c_arg_t) {
         "uintptr_t"
@@ -248,7 +256,7 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
 /// Returns the name for `c_arg_t` to use in the rust-binding function.
 fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
     let c_arg_t = c_arg_t.as_str();
-    if c_arg_t == "enum isl_dim_type" {
+    if c_arg_t == "enum isl_dim_type" || c_arg_t == "enum isl_fold" {
         C_TO_RS_BINDING[c_arg_t].to_string()
     } else if is_isl_type(&c_arg_t) {
         let c_arg_t = if c_arg_t.starts_with("const ") {
@@ -259,7 +267,6 @@ fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
             c_arg_t.to_string()
         };
         let c_arg_t = c_arg_t.as_str();
-
         match ownership.unwrap() {
             ISLOwnership::Keep => format!("&{}", C_TO_RS_BINDING[c_arg_t]),
             ISLOwnership::Take => C_TO_RS_BINDING[c_arg_t].to_string(),
@@ -553,7 +560,7 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     let clang = clang::Clang::new().unwrap();
     let index = clang::Index::new(&clang, false, true);
     let t_unit = index.parser(src_file)
-                      .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
+                      .arguments(&CLANG_ARGS)
                       .parse()
                       .unwrap();
     let tokens = t_unit.get_entity().get_range().unwrap().tokenize();
@@ -736,71 +743,78 @@ fn implement_bindings(dst_t: &str, src_t: &str, dst_file: &str, src_file: &str) 
     // }}}
 
     // Write the generated code
-    fs::write(dst_file,
-              format!("// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n\n{}", scope.to_string())
-              ).expect(format!("error writing to {} file.", dst_file)
-                                                  .as_str());
+    fs::write(
+              dst_file,
+              format!(
+        "// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n\n{}",
+        scope.to_string()
+    ),
+    ).expect(format!("error writing to {} file.", dst_file).as_str());
 }
 
-/// Generate rust code to define the `isl_dim_type` enum declation in rust and
-/// writes the generated to the `dst_file` path. (Touches the file if not
+/// Generate rust code to define enum declation in rust corresponding to `src_t`
+/// and writes the generated to the `dst_file` path. (Touches the file if not
 /// already present)
 ///
 /// # Warnings
 ///  
 /// - Overwrites the contents of `dst_file`.
-fn define_dim_type_enum(dst_file: &str, src_file: &str) {
+fn define_enum(src_t: &str, variant_prefixes: &str, dst_file: &str, src_file: &str) {
     let clang = clang::Clang::new().unwrap();
     let index = clang::Index::new(&clang, false, true);
     let t_unit = index.parser(src_file)
-                      .arguments(&["-I", "isl/include/", "-I", "/usr/lib64/clang/13/include"])
+                      .arguments(&CLANG_ARGS)
                       .detailed_preprocessing_record(true)
                       .parse()
                       .unwrap();
 
-    let isl_dim_type_decl = t_unit.get_entity()
-                                  .get_children()
-                                  .into_iter()
-                                  .filter(|e| {
-                                      e.get_kind() == clang::EntityKind::EnumDecl
-                                      && e.get_display_name().is_some()
-                                      && e.get_display_name().unwrap() == "isl_dim_type"
-                                  })
-                                  .next()
-                                  .unwrap();
+    let isl_enum_decl = t_unit.get_entity()
+                              .get_children()
+                              .into_iter()
+                              .filter(|e| {
+                                  e.get_kind() == clang::EntityKind::EnumDecl
+                                  && e.get_display_name().is_some()
+                                  && e.get_display_name().unwrap() == src_t
+                              })
+                              .next()
+                              .unwrap();
 
     // KK: Assertion to guard assumption
-    assert!(isl_dim_type_decl.get_children()
-                             .into_iter()
-                             .all(|x| x.get_kind() == clang::EntityKind::EnumConstantDecl));
+    assert!(isl_enum_decl.get_children()
+                         .into_iter()
+                         .all(|x| x.get_kind() == clang::EntityKind::EnumConstantDecl));
 
-    let c_variant_names = isl_dim_type_decl.get_children()
-                                           .into_iter()
-                                           .map(|x| x.get_display_name().unwrap())
-                                           .collect::<Vec<_>>();
+    let c_variant_names = isl_enum_decl.get_children()
+                                       .into_iter()
+                                       .map(|x| x.get_display_name().unwrap())
+                                       .collect::<Vec<_>>();
 
     // KK: Assertion to guard assumption
-    assert!(c_variant_names.iter().all(|x| x.starts_with("isl_dim_")));
+    assert!(c_variant_names.iter()
+                           .all(|x| x.starts_with(variant_prefixes)));
 
     let mut scope = Scope::new();
-    let dim_type_enum = scope.new_enum(C_TO_RS_BINDING["enum isl_dim_type"])
-                             .vis("pub")
-                             .repr("C")
-                             .derive("Debug")
-                             .derive("Clone");
+    let rust_enum = scope.new_enum(C_TO_RS_BINDING[format!("enum {}", src_t).as_str()])
+                         .vis("pub")
+                         .repr("C")
+                         .derive("Debug")
+                         .derive("Clone");
     for c_variant_name in c_variant_names {
-        let name_in_rust = c_variant_name[8..].to_string(); // 8 = len("isl_dim_")
-                                                            // convert variant name to camel case
+        let name_in_rust = c_variant_name[variant_prefixes.len()..].to_string(); // convert variant name to camel case
         let name_in_rust = format!("{}{}",
                                    &name_in_rust[..1].to_uppercase(),
                                    &name_in_rust[1..]);
-        dim_type_enum.new_variant(guard_identifier(name_in_rust));
+        rust_enum.new_variant(guard_identifier(name_in_rust));
     }
 
     // Write the generated code
-    fs::write(dst_file,
-              format!("// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n{}", scope.to_string())
-              ).expect("error writing to dim_type file");
+    fs::write(
+              dst_file,
+              format!(
+        "// Automatically generated by isl_bindings_generator.\n// LICENSE: MIT\n{}",
+        scope.to_string()
+    ),
+    ).expect("error writing to dim_type file");
 }
 
 /// Populates `src/bindings/mod.rs` with isl types.
@@ -859,7 +873,15 @@ fn main() {
 
     fs::create_dir("src/bindings/").unwrap();
 
-    define_dim_type_enum("src/bindings/dim_type.rs", "isl/include/isl/space_type.h");
+    define_enum("isl_dim_type",
+                "isl_dim_",
+                "src/bindings/dim_type.rs",
+                "isl/include/isl/space_type.h");
+
+    define_enum("isl_fold",
+                "isl_fold_",
+                "src/bindings/fold.rs",
+                "isl/include/isl/polynomial_type.h");
 
     // {{{ emit bindings for primitive types
 
@@ -896,6 +918,10 @@ fn main() {
                        "isl_basic_set",
                        "src/bindings/bset.rs",
                        "isl/include/isl/set.h");
+    implement_bindings("Constraint",
+                       "isl_constraint",
+                       "src/bindings/constraint.rs",
+                       "isl/include/isl/constraint.h");
     implement_bindings("Set",
                        "isl_set",
                        "src/bindings/set.rs",
@@ -916,6 +942,26 @@ fn main() {
                        "isl_pw_aff",
                        "src/bindings/pw_aff.rs",
                        "isl/include/isl/aff.h");
+    implement_bindings("Term",
+                       "isl_term",
+                       "src/bindings/term.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("QPolynomial",
+                       "isl_qpolynomial",
+                       "src/bindings/qpolynomial.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("QPolynomialFold",
+                       "isl_qpolynomial_fold",
+                       "src/bindings/qpolynomial_fold.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("PwQPolynomial",
+                       "isl_pw_qpolynomial",
+                       "src/bindings/pw_qpolynomial.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("PwQPolynomialFold",
+                       "isl_pw_qpolynomial_fold",
+                       "src/bindings/pw_qpolynomial_fold.rs",
+                       "isl/include/isl/polynomial.h");
     implement_bindings("StrideInfo",
                        "isl_stride_info",
                        "src/bindings/stride_info.rs",
