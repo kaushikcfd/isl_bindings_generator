@@ -53,7 +53,7 @@ lazy_static! {
                        ("isl_aff *", "Aff"),
                        ("isl_pw_aff *", "PwAff"),
                        ("isl_qpolynomial *", "QPolynomial"),
-                       ("isl_pw_qpolynomial *", "PwQpolynomial"),
+                       ("isl_pw_qpolynomial *", "PwQPolynomial"),
                        ("isl_qpolynomial_fold *", "QPolynomialFold"),
                        ("isl_pw_qpolynomial_fold *", "PwQPolynomialFold"),
                        ("isl_stride_info *", "StrideInfo"),
@@ -334,7 +334,7 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
     let var_name = var_name.to_string();
 
     match rs_ty_name {
-        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" | "DimType" => {}
+        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" => {}
         "&str" => {
             func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
             func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
@@ -360,7 +360,7 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
             let var_name = var_name.to_string();
 
             match rs_ty_name.as_str() {
-                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "DimType" => {}
+                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" => {}
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
@@ -822,6 +822,7 @@ fn generate_bindings_mod(dst_file: &str) {
     let mut scope = Scope::new();
 
     scope.raw("mod dim_type;");
+    scope.raw("mod fold;");
     scope.raw("mod fixed_box;");
     scope.raw("mod stride_info;");
     scope.raw("mod context;");
@@ -840,8 +841,15 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("mod map;");
     scope.raw("mod aff;");
     scope.raw("mod pw_aff;");
+    scope.raw("mod term;");
+    scope.raw("mod constraint;");
+    scope.raw("mod qpolynomial;");
+    scope.raw("mod pw_qpolynomial;");
+    scope.raw("mod qpolynomial_fold;");
+    scope.raw("mod pw_qpolynomial_fold;");
 
     scope.raw("pub use dim_type::DimType;");
+    scope.raw("pub use fold::Fold;");
     scope.raw("pub use fixed_box::FixedBox;");
     scope.raw("pub use stride_info::StrideInfo;");
 
@@ -861,6 +869,12 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("pub use map::Map;");
     scope.raw("pub use aff::Aff;");
     scope.raw("pub use pw_aff::PwAff;");
+    scope.raw("pub use term::Term;");
+    scope.raw("pub use constraint::Constraint;");
+    scope.raw("pub use qpolynomial::QPolynomial;");
+    scope.raw("pub use pw_qpolynomial::PwQPolynomial;");
+    scope.raw("pub use qpolynomial_fold::QPolynomialFold;");
+    scope.raw("pub use pw_qpolynomial_fold::PwQPolynomialFold;");
 
     // Write the generated code
     fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
