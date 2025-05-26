@@ -52,6 +52,9 @@ lazy_static! {
                        ("isl_map *", "Map"),
                        ("isl_aff *", "Aff"),
                        ("isl_pw_aff *", "PwAff"),
+                       ("isl_schedule *", "Schedule"),
+                       ("isl_schedule_constraints *", "ScheduleConstraints"),
+                       ("isl_schedule_node *", "ScheduleNode"),
                        ("isl_qpolynomial *", "QPolynomial"),
                        ("isl_pw_qpolynomial *", "PwQPolynomial"),
                        ("isl_qpolynomial_fold *", "QPolynomialFold"),
@@ -59,7 +62,9 @@ lazy_static! {
                        ("isl_stride_info *", "StrideInfo"),
                        ("isl_fixed_box *", "FixedBox"),
                        ("enum isl_dim_type", "DimType"),
-                       ("enum isl_fold", "Fold")
+                       ("enum isl_fold", "Fold"),
+                       ("enum isl_error", "Error"),
+                       ("enum isl_schedule_node_type", "ScheduleNodeType")
                        ]);
    static ref ISL_CORE_TYPES: HashSet<&'static str> = C_TO_RS_BINDING.keys().filter(|k| !k.starts_with("enum isl_")).copied().collect();
    static ref ISL_TYPES_RS: HashSet<&'static str> = C_TO_RS_BINDING.values().copied().collect();
@@ -88,7 +93,6 @@ lazy_static! {
                        "void (*)(void *)",
                        "char **",
                        "isl_mat **",
-                       "enum isl_error",
                        "isl_id_list *",
                        "isl_basic_set_list *",
                        "isl_basic_map_list *",
@@ -102,6 +106,11 @@ lazy_static! {
                        "isl_multi_val *",
                        "isl_multi_id *",
                        "isl_union_pw_qpolynomial *",
+                       "isl_union_set *",
+                       "isl_union_map *",
+                       "isl_multi_union_pw_aff *",
+                       "isl_multi_union_pw_multi_aff *",
+                       "isl_union_pw_multi_aff *",
                        "isl_union_pw_qpolynomial_fold *",
                        "isl_pw_qpolynomial_fold_list *",
                        "isl_qpolynomial **",
@@ -218,7 +227,11 @@ fn is_type_not_supported(c_arg_t: &String) -> bool {
 /// Returns the name for `c_arg_t` to use in `extern "C"` block function
 /// declarations.
 fn to_extern_arg_t(c_arg_t: String) -> String {
-    let extern_t = if c_arg_t == "enum isl_dim_type" || c_arg_t == "enum isl_fold" {
+    let extern_t = if c_arg_t == "enum isl_dim_type"
+                      || c_arg_t == "enum isl_fold"
+                      || c_arg_t == "enum isl_error"
+                      || c_arg_t == "enum isl_schedule_node_type"
+    {
         C_TO_RS_BINDING[c_arg_t.as_str()]
     } else if is_isl_type(&c_arg_t) {
         "uintptr_t"
@@ -256,7 +269,11 @@ fn to_extern_arg_t(c_arg_t: String) -> String {
 /// Returns the name for `c_arg_t` to use in the rust-binding function.
 fn to_rust_arg_t(c_arg_t: String, ownership: Option<ISLOwnership>) -> String {
     let c_arg_t = c_arg_t.as_str();
-    if c_arg_t == "enum isl_dim_type" || c_arg_t == "enum isl_fold" {
+    if c_arg_t == "enum isl_dim_type"
+       || c_arg_t == "enum isl_fold"
+       || c_arg_t == "enum isl_error"
+       || c_arg_t == "enum isl_schedule_node_type"
+    {
         C_TO_RS_BINDING[c_arg_t].to_string()
     } else if is_isl_type(&c_arg_t) {
         let c_arg_t = if c_arg_t.starts_with("const ") {
@@ -334,7 +351,8 @@ fn preprocess_var_to_extern_func(func: &mut codegen::Function, rs_ty_name: &Stri
     let var_name = var_name.to_string();
 
     match rs_ty_name {
-        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" => {}
+        "i32" | "u32" | "bool" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" | "Error"
+        | "ScheduleNodeType" => {}
         "&str" => {
             func.line(format!("let {} = CString::new({}).unwrap();", var_name, var_name));
             func.line(format!("let {} = {}.as_ptr();", var_name, var_name));
@@ -360,7 +378,8 @@ fn postprocess_var_from_extern_func(func: &mut codegen::Function, rs_ty_name: Op
             let var_name = var_name.to_string();
 
             match rs_ty_name.as_str() {
-                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" => {}
+                "i32" | "u32" | "u64" | "i64" | "f64" | "usize" | "DimType" | "Fold" | "Error"
+                | "ScheduleNodeType" => {}
                 x if (ISL_TYPES_RS.contains(x)
                       || (x.starts_with("&") && ISL_TYPES_RS.contains(&x[1..]))) =>
                 {
@@ -850,6 +869,8 @@ fn generate_bindings_mod(dst_file: &str) {
 
     scope.raw("pub use dim_type::DimType;");
     scope.raw("pub use fold::Fold;");
+    scope.raw("pub use error::Error;");
+    scope.raw("pub use schedule_node_type::ScheduleNodeType;");
     scope.raw("pub use fixed_box::FixedBox;");
     scope.raw("pub use stride_info::StrideInfo;");
 
@@ -875,6 +896,9 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("pub use pw_qpolynomial::PwQPolynomial;");
     scope.raw("pub use qpolynomial_fold::QPolynomialFold;");
     scope.raw("pub use pw_qpolynomial_fold::PwQPolynomialFold;");
+    scope.raw("pub use schedule_constraints::ScheduleConstraints;");
+    scope.raw("pub use schedule_node::ScheduleNode;");
+    scope.raw("pub use schedule::Schedule;");
 
     // Write the generated code
     fs::write(dst_file, scope.to_string()).expect("error writing to dim_type file");
@@ -891,11 +915,18 @@ fn main() {
                 "isl_dim_",
                 "src/bindings/dim_type.rs",
                 "isl/include/isl/space_type.h");
-
     define_enum("isl_fold",
                 "isl_fold_",
                 "src/bindings/fold.rs",
                 "isl/include/isl/polynomial_type.h");
+    define_enum("isl_error",
+                "isl_error_",
+                "src/bindings/error.rs",
+                "isl/include/isl/ctx.h");
+    define_enum("isl_schedule_node_type",
+                "isl_schedule_node_",
+                "src/bindings/schedule_node_type.rs",
+                "isl/include/isl/schedule_type.h");
 
     // {{{ emit bindings for primitive types
 
@@ -984,6 +1015,18 @@ fn main() {
                        "isl_fixed_box",
                        "src/bindings/fixed_box.rs",
                        "isl/include/isl/fixed_box.h");
+    implement_bindings("ScheduleConstraints",
+                       "isl_schedule_constraints",
+                       "src/bindings/schedule_constraints.rs",
+                       "isl/include/isl/schedule.h");
+    implement_bindings("ScheduleNode",
+                       "isl_schedule_node",
+                       "src/bindings/schedule_node.rs",
+                       "isl/include/isl/schedule.h");
+    implement_bindings("Schedule",
+                       "isl_schedule",
+                       "src/bindings/schedule.rs",
+                       "isl/include/isl/schedule.h");
 
     // }}}
 
