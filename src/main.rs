@@ -61,6 +61,16 @@ lazy_static! {
                        ("isl_pw_qpolynomial_fold *", "PwQPolynomialFold"),
                        ("isl_stride_info *", "StrideInfo"),
                        ("isl_fixed_box *", "FixedBox"),
+                       ("isl_multi_aff *", "MultiAff"),
+                       ("isl_multi_pw_aff *", "MultiPwAff"),
+                       ("isl_multi_union_pw_aff *", "MultiUnionPwAff"),
+                       ("isl_pw_multi_aff *", "PwMultiAff"),
+                       ("isl_union_map *", "UnionMap"),
+                       ("isl_union_set *", "UnionSet"),
+                       ("isl_union_pw_aff *", "UnionPwAff"),
+                       ("isl_union_pw_qpolynomial *", "UnionPwQPolynomial"),
+                       ("isl_union_pw_qpolynomial_fold *", "UnionPwQPolynomialFold"),
+                       ("isl_union_pw_multi_aff *", "UnionPwMultiAff"),
                        ("enum isl_dim_type", "DimType"),
                        ("enum isl_fold", "Fold"),
                        ("enum isl_error", "Error"),
@@ -99,19 +109,11 @@ lazy_static! {
                        "isl_set_list *",
                        "isl_map_list *",
                        "isl_aff_list *",
-                       "isl_union_pw_aff *",
-                       "isl_multi_aff *",
-                       "isl_multi_pw_aff *",
-                       "isl_pw_multi_aff *",
+                       "isl_pw_aff_list *",
+                       "isl_pw_multi_aff_list *",
+                       "isl_pw_qpolynomial_list *",
                        "isl_multi_val *",
                        "isl_multi_id *",
-                       "isl_union_pw_qpolynomial *",
-                       "isl_union_set *",
-                       "isl_union_map *",
-                       "isl_multi_union_pw_aff *",
-                       "isl_multi_union_pw_multi_aff *",
-                       "isl_union_pw_multi_aff *",
-                       "isl_union_pw_qpolynomial_fold *",
                        "isl_pw_qpolynomial_fold_list *",
                        "isl_qpolynomial **",
         ]);
@@ -886,16 +888,26 @@ fn generate_bindings_mod(dst_file: &str) {
     scope.raw("pub use vec::Vec;");
     scope.raw("pub use bset::BasicSet;");
     scope.raw("pub use set::Set;");
+    scope.raw("pub use union_set::UnionSet;");
+    scope.raw("pub use union_map::UnionMap;");
+    scope.raw("pub use union_pw_aff::UnionPwAff;");
+    scope.raw("pub use union_pw_multi_aff::UnionPwMultiAff;");
     scope.raw("pub use bmap::BasicMap;");
     scope.raw("pub use map::Map;");
     scope.raw("pub use aff::Aff;");
+    scope.raw("pub use multi_aff::MultiAff;");
+    scope.raw("pub use multi_pw_aff::MultiPwAff;");
+    scope.raw("pub use multi_union_pw_aff::MultiUnionPwAff;");
+    scope.raw("pub use pw_multi_aff::PwMultiAff;");
     scope.raw("pub use pw_aff::PwAff;");
     scope.raw("pub use term::Term;");
     scope.raw("pub use constraint::Constraint;");
     scope.raw("pub use qpolynomial::QPolynomial;");
     scope.raw("pub use pw_qpolynomial::PwQPolynomial;");
+    scope.raw("pub use union_pw_qpolynomial::UnionPwQPolynomial;");
     scope.raw("pub use qpolynomial_fold::QPolynomialFold;");
     scope.raw("pub use pw_qpolynomial_fold::PwQPolynomialFold;");
+    scope.raw("pub use union_pw_qpolynomial_fold::UnionPwQPolynomialFold;");
     scope.raw("pub use schedule_constraints::ScheduleConstraints;");
     scope.raw("pub use schedule_node::ScheduleNode;");
     scope.raw("pub use schedule::Schedule;");
@@ -1015,6 +1027,47 @@ fn main() {
                        "isl_fixed_box",
                        "src/bindings/fixed_box.rs",
                        "isl/include/isl/fixed_box.h");
+
+    implement_bindings("UnionMap",
+                       "isl_union_map",
+                       "src/bindings/union_map.rs",
+                       "isl/include/isl/union_map.h");
+    implement_bindings("UnionSet",
+                       "isl_union_set",
+                       "src/bindings/union_set.rs",
+                       "isl/include/isl/union_set.h");
+    implement_bindings("UnionPwAff",
+                       "isl_union_pw_aff",
+                       "src/bindings/union_pw_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("UnionPwMultiAff",
+                       "isl_union_pw_multi_aff",
+                       "src/bindings/union_pw_multi_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("UnionPwQPolynomial",
+                       "isl_union_pw_qpolynomial",
+                       "src/bindings/union_pw_qpolynomial.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("UnionPwQPolynomialFold",
+                       "isl_union_pw_qpolynomial_fold",
+                       "src/bindings/union_pw_qpolynomial_fold.rs",
+                       "isl/include/isl/polynomial.h");
+    implement_bindings("MultiAff",
+                       "isl_multi_aff",
+                       "src/bindings/multi_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("MultiPwAff",
+                       "isl_multi_pw_aff",
+                       "src/bindings/multi_pw_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("MultiUnionPwAff",
+                       "isl_multi_union_pw_aff",
+                       "src/bindings/multi_union_pw_aff.rs",
+                       "isl/include/isl/aff.h");
+    implement_bindings("PwMultiAff",
+                       "isl_pw_multi_aff",
+                       "src/bindings/pw_multi_aff.rs",
+                       "isl/include/isl/aff.h");
     implement_bindings("ScheduleConstraints",
                        "isl_schedule_constraints",
                        "src/bindings/schedule_constraints.rs",
