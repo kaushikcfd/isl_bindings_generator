@@ -31,5 +31,7 @@ pub fn main() {
   }
   fs::create_dir("src/bindings/").unwrap();
 
-  extract_functions("isl/include/isl/ctx.h");
+  extract_functions("foo.h").unwrap();
+  // extract_functions("isl/include/isl/ctx.h").unwrap();
+  // extract_functions("isl/include/isl/val.h").unwrap();
 }
