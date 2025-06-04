@@ -32,14 +32,14 @@ pub struct SourceLocation {
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct BareSourceLocation {
   pub offset: usize,
-  pub file: String,
-  pub line: usize,
+  pub file: Option<String>,
+  pub line: Option<usize>,
   pub col: usize,
   #[serde(rename = "tokLen")]
   pub tok_len: usize,
 }
 
-fn cfile_to_json(file: &str) -> Result<String> {
+fn cfile_to_json(file: &String) -> Result<String> {
   // Run clang command
   let output = Command::new("clang").args(["-I",
                                            "isl/include/",
@@ -49,7 +49,7 @@ fn cfile_to_json(file: &str) -> Result<String> {
                                            "-ast-dump=json",
                                            "-Xclang",
                                            "-detailed-preprocessing-record",
-                                           file])
+                                           file.as_str()])
                                     .output()?;
 
   // Check if command was successful
@@ -60,15 +60,26 @@ fn cfile_to_json(file: &str) -> Result<String> {
   }
   let json_content = String::from_utf8(output.stdout)?;
 
-  // println!("JSON={}", json_content);
+  println!("JSON={}", json_content);
 
   return Ok(json_content);
 }
 
-pub fn extract_functions(filename: &str) -> Result<Vec<ISLFunction>> {
+fn get_begin_range_spelling_loc_filename(node: &ClangNode, input_file: &String) -> String {
+  let input_file = input_file.clone();
+  match &node.range {
+    Some(src_range) => match &src_range.begin.spelling_loc {
+      Some(src_loc) => src_loc.file.clone().map_or(input_file, |f| f),
+      None => input_file,
+    },
+    None => input_file,
+  }
+}
+
+pub fn extract_functions(filename: &String) -> Result<Vec<ISLFunction>> {
   let ast_json = cfile_to_json(filename)?;
   let node: ClangNode = serde_json::from_str(&ast_json.as_str())?;
-  println!("node={:#?}", node);
+  // println!("node={:#?}", node);
 
   let t_unit_body: Result<Vec<ClangNode>> = match node.kind.as_str() {
     "TranslationUnitDecl" => Ok(node.inner),
@@ -81,13 +92,10 @@ pub fn extract_functions(filename: &str) -> Result<Vec<ISLFunction>> {
     match decl.kind.as_str() {
       "FunctionDecl" => {
         if decl.name.starts_with("isl_") {
-          if decl.loc.map_or(false, |s| {
-                       s.spelling_loc
-                        .map_or(false, |s| s.file.starts_with("isl/include"))
-                     })
-          {
-            println!("Got a function: {}.", decl.name);
-            bail!("I want to exit early.");
+          let spelling_filename = get_begin_range_spelling_loc_filename(&decl, filename);
+          if spelling_filename.starts_with("isl/include/") {
+            println!("Got a function: {} in file {}.",
+                     decl.name, spelling_filename);
           }
         }
       }
