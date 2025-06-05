@@ -34,6 +34,7 @@ pub fn main() {
 
   let mut parse_state = ParseState { file_to_string: HashMap::new() };
 
-  // extract_functions(&("isl/include/isl/ctx.h".to_string()), &mut parse_state).unwrap();
+  // extract_functions(&("isl/include/isl/ctx.h".to_string()), &mut
+  // parse_state).unwrap();
   extract_functions(&("isl/include/isl/val.h".to_string()), &mut parse_state).unwrap();
 }
