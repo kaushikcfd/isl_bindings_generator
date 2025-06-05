@@ -1,4 +1,6 @@
+use anyhow::{bail, Result};
 pub enum CType {
+  Void,
   Int,
 }
 
@@ -9,12 +11,21 @@ pub enum ISLBorrowRule {
 }
 
 pub struct Parameter {
-  name: String,
-  borrow: ISLBorrowRule,
+  pub name: String,
+  pub type_: CType,
+  pub borrow: ISLBorrowRule,
 }
 
 pub struct ISLFunction {
-  name: String,
-  parameters: Vec<Parameter>,
-  ret_type: CType,
+  pub name: String,
+  pub parameters: Vec<Parameter>,
+  pub ret_type: CType,
+}
+
+pub fn ctype_from_string(s: &String) -> Result<CType> {
+  match s.as_str() {
+    "void" => Ok(CType::Void),
+    "int" => Ok(CType::Int),
+    _ => bail!(format!("Unknown ctype {}", s)),
+  }
 }
