@@ -21,7 +21,8 @@
 mod cparse;
 mod types;
 
-use crate::cparse::extract_functions;
+use cparse::{extract_functions, ParseState};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -31,7 +32,8 @@ pub fn main() {
   }
   fs::create_dir("src/bindings/").unwrap();
 
-  // extract_functions(&("isl/include/isl/ctx.h".to_string())).unwrap();
-  extract_functions(&("isl/include/isl/val.h".to_string())).unwrap();
-  // extract_functions("isl/include/isl/val.h").unwrap();
+  let mut parse_state = ParseState { file_to_string: HashMap::new() };
+
+  // extract_functions(&("isl/include/isl/ctx.h".to_string()), &mut parse_state).unwrap();
+  extract_functions(&("isl/include/isl/val.h".to_string()), &mut parse_state).unwrap();
 }
