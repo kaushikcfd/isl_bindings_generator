@@ -114,7 +114,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
   for (iparam, func_decl_inner) in inner.iter().enumerate() {
     match &func_decl_inner.kind {
       Clang::ParmVarDecl(param_decl) => {
-        let param_type = param_decl.type_.qual_type.clone();
+        let param_type = ctype_from_string(&param_decl.type_.qual_type.clone())?;
         let param_begin_loc = &param_decl.range
                                          .clone()
                                          .unwrap()
@@ -122,7 +122,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
                                          .spelling_loc
                                          .unwrap();
         let (param_file, param_line, param_col) = get_loc_triple(param_begin_loc);
-        print!("{}[{}, {}, {}]",
+        print!("{}[{}, {}, {}], ",
                param_decl.name.clone().unwrap(),
                param_file,
                param_line,
@@ -130,7 +130,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
 
         // FIXME: Care about borrowship rules, type
         func_params.push(Parameter { name: param_decl.name.clone().unwrap(),
-                                     type_: CType::Int,
+                                     type_: param_type,
                                      borrow: ISLBorrowRule::IslKeep });
       }
       _ => bail!("Expect a func decl's inner to be a param."),
@@ -140,7 +140,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
 
   return Ok(ISLFunction { name: func_decl.name.clone(),
                           parameters: vec![],
-                          ret_type: CType::Void });
+                          ret_type: CType::I32 });
 }
 
 pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Vec<ISLFunction>> {
