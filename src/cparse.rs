@@ -115,13 +115,8 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
     match &func_decl_inner.kind {
       Clang::ParmVarDecl(param_decl) => {
         let param_type = ctype_from_string(&param_decl.type_.qual_type.clone())?;
-        let param_begin_loc = &param_decl.range
-                                         .clone()
-                                         .unwrap()
-                                         .begin
-                                         .spelling_loc
-                                         .unwrap();
-        let (param_file, param_line, param_col) = get_loc_triple(param_begin_loc);
+        let param_loc = &param_decl.loc.clone().unwrap().spelling_loc.unwrap();
+        let (param_file, param_line, param_col) = get_loc_triple(param_loc);
         print!("{}[{}, {}, {}], ",
                param_decl.name.clone().unwrap(),
                param_file,
@@ -146,7 +141,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_fil
 pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Vec<ISLFunction>> {
   let ast_json = cfile_to_json(filename)?;
   let t_unit: Node = serde_json::from_str(&ast_json.as_str())?;
-  // println!("node={:#?}", node);
+  // println!("node={:#?}", t_unit);
 
   let t_unit_body: Result<Vec<Node>> = match t_unit.kind {
     Clang::TranslationUnitDecl(_) => Ok(t_unit.inner),
