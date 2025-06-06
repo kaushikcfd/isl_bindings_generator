@@ -61,6 +61,18 @@ pub struct ISLFunction {
   pub ret_type: CType,
 }
 
+#[derive(Hash, PartialEq, Eq)]
+pub struct ISLEnum {
+  pub name: String,
+  pub variants: Vec<String>,
+}
+
+impl fmt::Display for ISLEnum {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}({})", self.name, self.variants.join(", "))
+  }
+}
+
 pub fn ctype_from_string(s: &String) -> Result<CType> {
   match s.as_str() {
     "int" => Ok(CType::I32),

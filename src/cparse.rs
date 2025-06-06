@@ -1,5 +1,5 @@
 use crate::types::{
-  ctype_from_string, is_primitive_ctype, CType, ISLBorrowRule, ISLFunction, Parameter,
+  ctype_from_string, is_primitive_ctype, CType, ISLBorrowRule, ISLEnum, ISLFunction, Parameter,
 };
 use anyhow::{bail, Result};
 use clang_ast::BareSourceLocation;
@@ -195,9 +195,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                param_end_loc.line,
                param_end_loc.col,
                borrow_rule);
-        // borrow_rule);
 
-        // FIXME: Care about borrowship rules
         func_params.push(Parameter { name: param_decl.name.clone().unwrap(),
                                      type_: param_type,
                                      borrow: borrow_rule });
@@ -208,9 +206,28 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
   }
   println!(".");
 
+  // FIXME: Get the return type!!
   return Ok(ISLFunction { name: func_decl.name.clone(),
-                          parameters: vec![],
+                          parameters: func_params,
                           ret_type: CType::I32 });
+}
+
+fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>, state: &mut ParseState)
+                      -> Result<ISLEnum> {
+  let mut variants: Vec<String> = vec![];
+  for enum_decl_inner in inner {
+    match &enum_decl_inner.kind {
+      Clang::EnumConstantDecl(enum_const_decl) => {
+        variants.push(enum_const_decl.name.clone());
+      }
+      _ => bail!("Expect a enum decl's inner to be a enum-constant-decl."),
+    }
+  }
+  println!("Enum: {}",
+           ISLEnum { name: enum_decl.name.clone().unwrap(),
+                     variants: variants.clone() });
+  return Ok(ISLEnum { name: enum_decl.name.clone().unwrap(),
+                      variants: variants });
 }
 
 pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Vec<ISLFunction>> {
@@ -248,4 +265,42 @@ pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Ve
     }
   }
   return Ok(isl_functions);
+}
+
+pub fn extract_enums(filename: &String, state: &mut ParseState) -> Result<Vec<ISLEnum>> {
+  let ast_json = cfile_to_json(filename)?;
+  let t_unit: Node = serde_json::from_str(&ast_json.as_str())?;
+  // println!("node={:#?}", t_unit);
+
+  let t_unit_body: Result<Vec<Node>> = match t_unit.kind {
+    Clang::TranslationUnitDecl(_) => Ok(t_unit.inner),
+    _ => bail!("Parsed file not a translation unit?"),
+  };
+
+  let mut isl_enums: Vec<ISLEnum> = vec![];
+
+  for decl in t_unit_body? {
+    match decl.kind {
+      Clang::EnumDecl(enum_decl) => match enum_decl.name.clone() {
+        Some(name) => {
+          if name.starts_with("isl_") {
+            let spelling_filename = enum_decl.range
+                                             .clone()
+                                             .unwrap()
+                                             .begin
+                                             .spelling_loc
+                                             .unwrap()
+                                             .file
+                                             .to_string();
+            if spelling_filename.starts_with("isl/include/") {
+              isl_enums.push(get_enum_from_decl(&enum_decl, &decl.inner, state)?)
+            }
+          }
+        }
+        _ => {}
+      },
+      _ => {}
+    }
+  }
+  return Ok(isl_enums);
 }
