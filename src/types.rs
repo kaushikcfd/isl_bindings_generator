@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CType {
   Bool,
   I32,
@@ -28,6 +28,7 @@ pub enum CType {
   Unsupported,
 }
 
+#[derive(Hash, PartialEq, Eq)]
 pub enum ISLBorrowRule {
   IslKeep,
   IslTake,
@@ -46,12 +47,14 @@ impl fmt::Display for ISLBorrowRule {
   }
 }
 
+#[derive(Hash, PartialEq, Eq)]
 pub struct Parameter {
   pub name: String,
   pub type_: CType,
   pub borrow: ISLBorrowRule,
 }
 
+#[derive(Hash, PartialEq, Eq)]
 pub struct ISLFunction {
   pub name: String,
   pub parameters: Vec<Parameter>,
