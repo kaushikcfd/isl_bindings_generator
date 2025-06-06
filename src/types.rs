@@ -1,4 +1,7 @@
 use anyhow::{bail, Result};
+use std::fmt;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CType {
   Bool,
   I32,
@@ -29,6 +32,18 @@ pub enum ISLBorrowRule {
   IslKeep,
   IslTake,
   PassByValue,
+  Unsupported,
+}
+
+impl fmt::Display for ISLBorrowRule {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      ISLBorrowRule::IslKeep => write!(f, "__isl_keep"),
+      ISLBorrowRule::IslTake => write!(f, "__isl_take"),
+      ISLBorrowRule::PassByValue => write!(f, "__isl_none"),
+      ISLBorrowRule::Unsupported => write!(f, "unsupported"),
+    }
+  }
 }
 
 pub struct Parameter {
@@ -85,5 +100,21 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     | "isl_val **"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
+  }
+}
+
+pub fn is_primitive_ctype(type_: CType) -> bool {
+  match type_ {
+    CType::Bool
+    | CType::I32
+    | CType::U32
+    | CType::I64
+    | CType::U64
+    | CType::F32
+    | CType::F64
+    | CType::Sizet
+    | CType::ISLDimType
+    | CType::ISLError => true,
+    _ => false,
   }
 }

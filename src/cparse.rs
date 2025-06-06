@@ -1,9 +1,12 @@
-use crate::types::{ctype_from_string, CType, ISLBorrowRule, ISLFunction, Parameter};
+use crate::types::{
+  ctype_from_string, is_primitive_ctype, CType, ISLBorrowRule, ISLFunction, Parameter,
+};
 use anyhow::{bail, Result};
 use clang_ast::BareSourceLocation;
 use serde::Serialize;
 use serde_derive::Deserialize;
 use std::collections::HashMap;
+use std::fs::read_to_string;
 use std::process::Command;
 
 type Node = clang_ast::Node<Clang>;
@@ -67,8 +70,15 @@ struct Type {
   pub qual_type: String,
 }
 
+#[derive(Debug, Clone)]
+struct LocTriple {
+  pub file: String,
+  pub line: usize,
+  pub col: usize,
+}
+
 pub struct ParseState {
-  pub file_to_string: HashMap<String, String>,
+  pub file_to_string: HashMap<String, Vec<String>>,
 }
 
 fn cfile_to_json(file: &String) -> Result<String> {
@@ -97,36 +107,101 @@ fn cfile_to_json(file: &String) -> Result<String> {
   return Ok(json_content);
 }
 
-fn get_loc_triple(src_loc: &BareSourceLocation) -> (String, usize, usize) {
-  (src_loc.file.to_string(), src_loc.line, src_loc.col)
+fn get_loc_triple(src_loc: &BareSourceLocation) -> LocTriple {
+  LocTriple { file: src_loc.file.to_string(),
+              line: src_loc.line,
+              col: src_loc.col }
 }
 
-fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, input_file: &String,
-                          state: &mut ParseState)
+fn get_line_in_file(file: &String, line: usize, state: &mut ParseState) -> String {
+  if !state.file_to_string.contains_key(file) {
+    let lines_in_file = read_to_string(file).unwrap()
+                                            .lines()
+                                            .map(String::from)
+                                            .collect();
+    state.file_to_string.insert(file.clone(), lines_in_file);
+  }
+  let lines_in_file = state.file_to_string.get(file).unwrap();
+  return lines_in_file[line - 1].clone();
+}
+
+fn get_borrow_rule_between(loc1: &LocTriple, loc2: &LocTriple, state: &mut ParseState)
+                           -> Result<ISLBorrowRule> {
+  assert!(loc1.file == loc2.file);
+  let file = &loc1.file;
+
+  let mut lines: Vec<String> = vec![];
+  for line in loc1.line..loc2.line + 1 {
+    if line == loc1.line && line == loc2.line {
+      lines.push(get_line_in_file(&file, loc2.line, state)[loc1.col - 1..loc2.col].to_string());
+    } else if line == loc1.line {
+      lines.push(get_line_in_file(&file, line, state)[loc1.col - 1..].to_string());
+    } else if line == loc2.line {
+      lines.push(get_line_in_file(&file, line, state)[..loc2.col].to_string());
+    } else {
+      lines.push(get_line_in_file(&file, line, state));
+    }
+  }
+
+  let in_between_code = lines.join("\n");
+  if in_between_code.contains("__isl_keep") {
+    Ok(ISLBorrowRule::IslKeep)
+  } else if in_between_code.contains("__isl_take") {
+    Ok(ISLBorrowRule::IslTake)
+  } else {
+    bail!("Could not infer the borrow rule from {}", in_between_code);
+  }
+}
+
+fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &mut ParseState)
                           -> Result<ISLFunction> {
   let mut func_params: Vec<Parameter> = vec![];
 
   let func_begin_loc = &func_decl.range.clone().unwrap().begin.spelling_loc.unwrap();
-  let (func_file, func_line, func_col) = get_loc_triple(func_begin_loc);
+  let mut prev_loc = get_loc_triple(func_begin_loc);
   print!("Function {} at ({}, {}, {}). Takes: ",
-         func_decl.name, func_file, func_line, func_col);
+         func_decl.name, prev_loc.file, prev_loc.line, prev_loc.col);
 
-  for (iparam, func_decl_inner) in inner.iter().enumerate() {
+  for (_iparam, func_decl_inner) in inner.iter().enumerate() {
     match &func_decl_inner.kind {
       Clang::ParmVarDecl(param_decl) => {
         let param_type = ctype_from_string(&param_decl.type_.qual_type.clone())?;
-        let param_loc = &param_decl.loc.clone().unwrap().spelling_loc.unwrap();
-        let (param_file, param_line, param_col) = get_loc_triple(param_loc);
-        print!("{}[{}, {}, {}], ",
+        let param_end_loc = get_loc_triple(&param_decl.range
+                                                      .clone()
+                                                      .unwrap()
+                                                      .end
+                                                      .clone()
+                                                      .spelling_loc
+                                                      .unwrap());
+        let borrow_rule = if param_type == CType::ISLCtx {
+          ISLBorrowRule::IslKeep
+        } else if is_primitive_ctype(param_type) {
+          ISLBorrowRule::PassByValue
+        } else if param_type == CType::Unsupported {
+          ISLBorrowRule::Unsupported
+        } else if param_type == CType::CString {
+          // FIXME: Make sure that this is correct.
+          ISLBorrowRule::IslKeep
+        } else if func_decl.name.ends_with("_copy") {
+          ISLBorrowRule::IslKeep
+        } else if func_decl.name.ends_with("_free") {
+          ISLBorrowRule::IslTake
+        } else {
+          get_borrow_rule_between(&prev_loc, &param_end_loc, state)?
+        };
+        print!("{}[{}, {}, {}, {}], ",
                param_decl.name.clone().unwrap(),
-               param_file,
-               param_line,
-               param_col);
+               param_end_loc.file,
+               param_end_loc.line,
+               param_end_loc.col,
+               borrow_rule);
+        // borrow_rule);
 
-        // FIXME: Care about borrowship rules, type
+        // FIXME: Care about borrowship rules
         func_params.push(Parameter { name: param_decl.name.clone().unwrap(),
                                      type_: param_type,
-                                     borrow: ISLBorrowRule::IslKeep });
+                                     borrow: borrow_rule });
+        prev_loc = param_end_loc;
       }
       _ => bail!("Expect a func decl's inner to be a param."),
     }
@@ -161,11 +236,11 @@ pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Ve
                                          .unwrap()
                                          .file
                                          .to_string();
-        if func_decl.name.starts_with("isl_") {
+        if func_decl.name.starts_with("isl_val_") {
           if spelling_filename.starts_with("isl/include/") {
             // println!("Processing func {} in file {}.",
             //          func_decl.name, spelling_filename);
-            isl_functions.push(get_function_from_decl(&func_decl, &decl.inner, filename, state)?);
+            isl_functions.push(get_function_from_decl(&func_decl, &decl.inner, state)?);
           }
         }
       }
