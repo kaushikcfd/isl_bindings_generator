@@ -23,8 +23,39 @@ mod types;
 
 use cparse::{extract_functions, ParseState};
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+
+use crate::types::ISLFunction;
+use lazy_static::lazy_static;
+
+lazy_static! {
+  static ref ISL_HEADERS: &'static [&'static str] = &["space_type.h",
+                                                      "ctx.h",
+                                                      "polynomial_type.h",
+                                                      "space.h",
+                                                      "local_space.h",
+                                                      "id.h",
+                                                      "val.h",
+                                                      "point.h",
+                                                      "mat.h",
+                                                      "constraint.h",
+                                                      "set.h",
+                                                      "map.h",
+                                                      "map_type.h",
+                                                      "union_set.h",
+                                                      "union_set_type.h",
+                                                      "union_map.h",
+                                                      "union_map_type.h",
+                                                      "aff.h",
+                                                      "polynomial.h",
+                                                      "stride_info.h",
+                                                      "fixed_box.h",
+                                                      "printer.h",
+                                                      "schedule_type.h",
+                                                      "schedule.h",];
+}
 
 pub fn main() {
   if Path::new("src/bindings/").is_dir() {
@@ -33,8 +64,12 @@ pub fn main() {
   fs::create_dir("src/bindings/").unwrap();
 
   let mut parse_state = ParseState { file_to_string: HashMap::new() };
+  let mut isl_functions: HashSet<ISLFunction> = HashSet::new();
 
-  // extract_functions(&("isl/include/isl/ctx.h".to_string()), &mut
-  // parse_state).unwrap();
-  extract_functions(&("isl/include/isl/val.h".to_string()), &mut parse_state).unwrap();
+  for isl_header in ISL_HEADERS.iter() {
+    isl_functions.extend(extract_functions(&(format!("isl/include/isl/{}", isl_header).to_string()),
+                                           &mut parse_state).unwrap());
+  }
+
+  println!("#ISL functions = {}.", isl_functions.len());
 }
