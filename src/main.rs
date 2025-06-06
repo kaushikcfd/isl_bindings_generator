@@ -55,7 +55,6 @@ lazy_static! {
                                                       "stride_info.h",
                                                       "fixed_box.h",
                                                       "printer.h",
-                                                      "schedule_type.h",
                                                       "schedule.h",];
 }
 
@@ -73,8 +72,8 @@ pub fn main() {
     isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string()),
                                    &mut parse_state).unwrap());
   }
-  if true {
-    panic!("Hello World");
+  for isl_enum in isl_enums {
+    println!("Enum: {}.", isl_enum);
   }
 
   for isl_header in ISL_HEADERS.iter() {

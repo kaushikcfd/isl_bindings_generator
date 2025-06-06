@@ -223,9 +223,9 @@ fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>, state: &mut Parse
       _ => bail!("Expect a enum decl's inner to be a enum-constant-decl."),
     }
   }
-  println!("Enum: {}",
-           ISLEnum { name: enum_decl.name.clone().unwrap(),
-                     variants: variants.clone() });
+  // println!("Enum: {}",
+  //          ISLEnum { name: enum_decl.name.clone().unwrap(),
+  //                    variants: variants.clone() });
   return Ok(ISLEnum { name: enum_decl.name.clone().unwrap(),
                       variants: variants });
 }
