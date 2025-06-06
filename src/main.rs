@@ -27,6 +27,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+use crate::cparse::extract_enums;
+use crate::types::ISLEnum;
 use crate::types::ISLFunction;
 use lazy_static::lazy_static;
 
@@ -65,6 +67,15 @@ pub fn main() {
 
   let mut parse_state = ParseState { file_to_string: HashMap::new() };
   let mut isl_functions: HashSet<ISLFunction> = HashSet::new();
+  let mut isl_enums: HashSet<ISLEnum> = HashSet::new();
+
+  for isl_header in ISL_HEADERS.iter() {
+    isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string()),
+                                   &mut parse_state).unwrap());
+  }
+  if true {
+    panic!("Hello World");
+  }
 
   for isl_header in ISL_HEADERS.iter() {
     isl_functions.extend(extract_functions(&(format!("isl/include/isl/{}", isl_header).to_string()),
