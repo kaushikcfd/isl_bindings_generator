@@ -63,11 +63,17 @@ pub enum CType {
   ISLMultiPwAff,
   ISLMultiUnionPwAff,
   ISLQPolynomial,
+  ISLQPolynomialList,
   ISLQPolynomialFold,
   ISLPwQPolynomialFold,
+  ISLUnionPwQPolynomialFold,
+  ISLPwQPolynomialFoldList,
   ISLPwQPolynomial,
   ISLPwQPolynomialList,
   ISLUnionPwQPolynomial,
+  ISLSchedule,
+  ISLScheduleNode,
+  ISLScheduleConstaints,
   Unsupported,
 }
 
@@ -149,6 +155,11 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     "isl_mat *" => Ok(CType::ISLMat),
     "isl_constraint *" | "struct isl_constraint *" => Ok(CType::ISLConstraint),
     "isl_constraint_list *" | "struct isl_constraint_list *" => Ok(CType::ISLConstraintList),
+    "isl_schedule *" | "struct isl_schedule *" => Ok(CType::ISLSchedule),
+    "isl_schedule_node *" | "struct isl_schedule_node *" => Ok(CType::ISLScheduleNode),
+    "isl_schedule_constraints *" | "struct isl_schedule_constraints *" => {
+      Ok(CType::ISLScheduleConstaints)
+    }
     "isl_point *" | "struct isl_point *" => Ok(CType::ISLPoint),
     "isl_id_list *" | "struct isl_id_list *" => Ok(CType::ISLIdList),
     "isl_multi_id *" | "struct isl_multi_id *" => Ok(CType::ISLMultiId),
@@ -185,8 +196,15 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     "isl_local_space *" => Ok(CType::ISLLocalSpace),
     "isl_aff *" | "struct isl_aff *" => Ok(CType::ISLAff),
     "isl_qpolynomial *" | "struct isl_qpolynomial *" => Ok(CType::ISLQPolynomial),
+    "isl_qpolynomial_list *" | "struct isl_qpolynomial_list *" => Ok(CType::ISLQPolynomialList),
     "isl_qpolynomial_fold *" => Ok(CType::ISLQPolynomialFold),
-    "isl_pw_qpolynomial_fold *" => Ok(CType::ISLPwQPolynomialFold),
+    "isl_pw_qpolynomial_fold *" | "struct isl_pw_qpolynomial_fold *" => {
+      Ok(CType::ISLPwQPolynomialFold)
+    }
+    "isl_union_pw_qpolynomial_fold *" => Ok(CType::ISLUnionPwQPolynomialFold),
+    "isl_pw_qpolynomial_fold_list *" | "struct isl_pw_qpolynomial_fold_list *" => {
+      Ok(CType::ISLPwQPolynomialFoldList)
+    }
     "isl_aff_list *" | "struct isl_aff_list *" => Ok(CType::ISLAffList),
     "isl_pw_aff *" | "struct isl_pw_aff *" => Ok(CType::ISLPwAff),
     "isl_pw_qpolynomial *" | "struct isl_pw_qpolynomial *" => Ok(CType::ISLPwQPolynomial),
@@ -326,6 +344,23 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     | "isl_bool (*)(isl_set *, isl_qpolynomial_fold *, void *)"
     | "isl_stat (*)(isl_pw_qpolynomial *, void *)"
     | "isl_bool (*)(isl_pw_qpolynomial *, void *)"
+    | "isl_stat (*)(isl_pw_qpolynomial_fold *, void *)"
+    | "isl_bool (*)(isl_pw_qpolynomial_fold *, void *)"
+    | "isl_bool (*)(isl_qpolynomial *, void *)"
+    | "isl_qpolynomial *(*)(isl_qpolynomial *, void *)"
+    | "int (*)(struct isl_qpolynomial *, struct isl_qpolynomial *, void *)"
+    | "isl_bool (*)(isl_qpolynomial *, isl_qpolynomial *, void *)"
+    | "isl_stat (*)(isl_qpolynomial_list *, void *)"
+    | "isl_pw_qpolynomial *(*)(isl_pw_qpolynomial *, void *)"
+    | "int (*)(struct isl_pw_qpolynomial *, struct isl_pw_qpolynomial *, void *)"
+    | "isl_bool (*)(isl_pw_qpolynomial *, isl_pw_qpolynomial *, void *)"
+    | "isl_stat (*)(isl_pw_qpolynomial_list *, void *)"
+    | "isl_pw_qpolynomial_fold *(*)(isl_pw_qpolynomial_fold *, void *)"
+    | "int (*)(struct isl_pw_qpolynomial_fold *, struct isl_pw_qpolynomial_fold *, void *)"
+    | "isl_bool (*)(isl_pw_qpolynomial_fold *, isl_pw_qpolynomial_fold *, void *)"
+    | "isl_stat (*)(isl_pw_qpolynomial_fold_list *, void *)"
+    | "isl_bool (*)(isl_schedule_node *, void *)"
+    | "isl_schedule_node *(*)(isl_schedule_node *, void *)"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
   }
