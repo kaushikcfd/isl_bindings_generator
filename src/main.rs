@@ -81,5 +81,7 @@ pub fn main() {
                                            &mut parse_state).unwrap());
   }
 
-  println!("#ISL functions = {}.", isl_functions.len());
+  for isl_func in isl_functions {
+    println!("Function: {}.", isl_func);
+  }
 }

@@ -30,6 +30,8 @@ struct TranslationUnitDecl {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct FunctionDecl {
   pub name: String,
+  #[serde(rename = "type")]
+  pub type_: Type,
   pub loc: Option<clang_ast::SourceLocation>,
   pub range: Option<clang_ast::SourceRange>,
 }
@@ -206,10 +208,18 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
   }
   println!(".");
 
+  let ret_type = ctype_from_string(&func_decl.type_
+                                             .qual_type
+                                             .clone()
+                                             .split(" (")
+                                             .next()
+                                             .unwrap()
+                                             .to_string())?;
+
   // FIXME: Get the return type!!
   return Ok(ISLFunction { name: func_decl.name.clone(),
                           parameters: func_params,
-                          ret_type: CType::I32 });
+                          ret_type: ret_type });
 }
 
 fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>, state: &mut ParseState)
