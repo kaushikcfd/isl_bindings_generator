@@ -73,6 +73,21 @@ impl fmt::Display for ISLEnum {
   }
 }
 
+impl fmt::Display for ISLFunction {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let param_strs: Vec<String> =
+      self.parameters
+          .iter()
+          .map(|p| format!("{} {:#?} {}", p.borrow, p.type_, p.name).to_string())
+          .collect();
+    write!(f,
+           "{:#?} {}({})",
+           self.ret_type,
+           self.name,
+           param_strs.join(", "))
+  }
+}
+
 pub fn ctype_from_string(s: &String) -> Result<CType> {
   match s.as_str() {
     "int" => Ok(CType::I32),
