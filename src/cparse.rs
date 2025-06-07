@@ -188,8 +188,8 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
   let mut prev_loc = LocTriple { file: "<start_line_of_loc2>".to_string(),
                                  line: 0,
                                  col: 0 };
-  print!("Function {} at ({}, {}, {}). Takes: ",
-         func_decl.name, prev_loc.file, prev_loc.line, prev_loc.col);
+  // print!("Function {} at ({}, {}, {}). Takes: ",
+  //        func_decl.name, prev_loc.file, prev_loc.line, prev_loc.col);
 
   for (_iparam, func_decl_inner) in inner.iter().enumerate() {
     match &func_decl_inner.kind {
@@ -220,12 +220,12 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
         } else {
           get_borrow_rule_between(&prev_loc, &param_end_loc, state)?
         };
-        print!("{}[{}, {}, {}, {}], ",
-               param_decl.name.clone().unwrap(),
-               param_end_loc.file,
-               param_end_loc.line,
-               param_end_loc.col,
-               borrow_rule);
+        // print!("{}[{}, {}, {}, {}], ",
+        //        param_decl.name.clone().unwrap(),
+        //        param_end_loc.file,
+        //        param_end_loc.line,
+        //        param_end_loc.col,
+        //        borrow_rule);
 
         func_params.push(Parameter { name: param_decl.name.clone().unwrap(),
                                      type_: param_type,
@@ -237,16 +237,15 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                  func_decl_inner),
     }
   }
-  println!(".");
-
-  println!("Parsing the ret-type from {}",
-           &func_decl.type_
-                     .qual_type
-                     .clone()
-                     .split("(")
-                     .next()
-                     .unwrap()
-                     .to_string());
+  // println!(".");
+  // println!("Parsing the ret-type from {}",
+  //          &func_decl.type_
+  //                    .qual_type
+  //                    .clone()
+  //                    .split("(")
+  //                    .next()
+  //                    .unwrap()
+  //                    .to_string());
   let ret_type = ctype_from_string(&func_decl.type_
                                              .qual_type
                                              .clone()
@@ -301,7 +300,7 @@ pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Ve
                                          .unwrap()
                                          .file
                                          .to_string();
-        println!("Parsing {} of {}", func_decl.name, spelling_filename);
+        // println!("Parsing {} of {}", func_decl.name, spelling_filename);
         if func_decl.name.starts_with("isl_")
            && !UNSUPPORTED_FUNCS.contains(func_decl.name.as_str())
         {
