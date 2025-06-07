@@ -34,23 +34,24 @@ use lazy_static::lazy_static;
 
 lazy_static! {
   static ref ISL_HEADERS: &'static [&'static str] = &["space_type.h",
-                                                      "ctx.h",
-                                                      "polynomial_type.h",
-                                                      "space.h",
-                                                      "local_space.h",
-                                                      "id.h",
-                                                      "val.h",
-                                                      "point.h",
-                                                      "mat.h",
-                                                      "constraint.h",
-                                                      "set.h",
-                                                      "map.h",
-                                                      "map_type.h",
-                                                      "union_set.h",
-                                                      "union_set_type.h",
-                                                      "union_map.h",
-                                                      "union_map_type.h",
-                                                      "aff.h",
+                                                      // "ctx.h",
+                                                      // "polynomial_type.h",
+                                                      // "space.h",
+                                                      // "local_space.h",
+                                                      // "id.h",
+                                                      // "val.h",
+                                                      // "point.h",
+                                                      // "mat.h",
+                                                      // "vec.h",
+                                                      // "constraint.h",
+                                                      // "set.h",
+                                                      // "map.h",
+                                                      // "map_type.h",
+                                                      // "union_set.h",
+                                                      // "union_set_type.h",
+                                                      // "union_map.h",
+                                                      // "union_map_type.h",
+                                                      // "aff.h",
                                                       "polynomial.h",
                                                       "stride_info.h",
                                                       "fixed_box.h",
@@ -69,12 +70,12 @@ pub fn main() {
   let mut isl_enums: HashSet<ISLEnum> = HashSet::new();
 
   for isl_header in ISL_HEADERS.iter() {
-    isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string()),
-                                   &mut parse_state).unwrap());
+    isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string())).unwrap());
   }
   for isl_enum in isl_enums {
     println!("Enum: {}.", isl_enum);
   }
+  // FIXME: Register enum isl_stat by hand.
 
   for isl_header in ISL_HEADERS.iter() {
     isl_functions.extend(extract_functions(&(format!("isl/include/isl/{}", isl_header).to_string()),

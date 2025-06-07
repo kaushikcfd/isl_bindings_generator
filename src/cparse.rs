@@ -3,11 +3,19 @@ use crate::types::{
 };
 use anyhow::{bail, Result};
 use clang_ast::BareSourceLocation;
+use lazy_static::lazy_static;
 use serde::Serialize;
 use serde_derive::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::read_to_string;
 use std::process::Command;
+
+lazy_static! {
+  static ref UNSUPPORTED_FUNCS: HashSet<&'static str> =
+    HashSet::from(["isl_space_extend",
+                   "isl_basic_set_has_defining_equality",
+                   "isl_basic_set_has_defining_inequalities"]);
+}
 
 type Node = clang_ast::Node<Clang>;
 
@@ -18,6 +26,7 @@ enum Clang {
   ParmVarDecl(ParmVarDecl),
   EnumDecl(EnumDecl),
   EnumConstantDecl(EnumConstantDecl),
+  DeprecatedAttr(DeprecatedAttr),
   Unknown(UnknownNode),
 }
 
@@ -55,6 +64,12 @@ struct ParmVarDecl {
   pub name: Option<String>,
   #[serde(rename = "type")]
   pub type_: Type,
+  pub loc: Option<clang_ast::SourceLocation>,
+  pub range: Option<clang_ast::SourceRange>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct DeprecatedAttr {
   pub loc: Option<clang_ast::SourceLocation>,
   pub range: Option<clang_ast::SourceRange>,
 }
@@ -127,9 +142,20 @@ fn get_line_in_file(file: &String, line: usize, state: &mut ParseState) -> Strin
   return lines_in_file[line - 1].clone();
 }
 
-fn get_borrow_rule_between(loc1: &LocTriple, loc2: &LocTriple, state: &mut ParseState)
+fn get_borrow_rule_between(loc1_: &LocTriple, loc2: &LocTriple, state: &mut ParseState)
                            -> Result<ISLBorrowRule> {
-  assert!(loc1.file == loc2.file);
+  let loc1 = if loc1_.file == "<start_line_of_loc2>" {
+    LocTriple { file: loc2.file.clone(),
+                col: 1,
+                line: loc2.line }
+  } else {
+    loc1_.clone()
+  };
+
+  assert!(loc1.file == loc2.file,
+          "Loc1 in {:#?}. Loc2 in {:#?}",
+          loc1.file,
+          loc2.file);
   let file = &loc1.file;
 
   let mut lines: Vec<String> = vec![];
@@ -159,8 +185,9 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                           -> Result<ISLFunction> {
   let mut func_params: Vec<Parameter> = vec![];
 
-  let func_begin_loc = &func_decl.range.clone().unwrap().begin.spelling_loc.unwrap();
-  let mut prev_loc = get_loc_triple(func_begin_loc);
+  let mut prev_loc = LocTriple { file: "<start_line_of_loc2>".to_string(),
+                                 line: 0,
+                                 col: 0 };
   print!("Function {} at ({}, {}, {}). Takes: ",
          func_decl.name, prev_loc.file, prev_loc.line, prev_loc.col);
 
@@ -176,6 +203,8 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                                                       .spelling_loc
                                                       .unwrap());
         let borrow_rule = if param_type == CType::ISLCtx {
+          ISLBorrowRule::IslKeep
+        } else if param_type == CType::ISLArgs {
           ISLBorrowRule::IslKeep
         } else if is_primitive_ctype(param_type) {
           ISLBorrowRule::PassByValue
@@ -203,15 +232,25 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                                      borrow: borrow_rule });
         prev_loc = param_end_loc;
       }
-      _ => bail!("Expect a func decl's inner to be a param."),
+      Clang::DeprecatedAttr(_) => { /*Do nothing for attribute */ }
+      _ => bail!("Expect a func decl's inner to be a param, got {:#?}.",
+                 func_decl_inner),
     }
   }
   println!(".");
 
+  println!("Parsing the ret-type from {}",
+           &func_decl.type_
+                     .qual_type
+                     .clone()
+                     .split("(")
+                     .next()
+                     .unwrap()
+                     .to_string());
   let ret_type = ctype_from_string(&func_decl.type_
                                              .qual_type
                                              .clone()
-                                             .split(" (")
+                                             .split("(")
                                              .next()
                                              .unwrap()
                                              .to_string())?;
@@ -222,8 +261,7 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                           ret_type: ret_type });
 }
 
-fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>, state: &mut ParseState)
-                      -> Result<ISLEnum> {
+fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>) -> Result<ISLEnum> {
   let mut variants: Vec<String> = vec![];
   for enum_decl_inner in inner {
     match &enum_decl_inner.kind {
@@ -258,12 +296,15 @@ pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Ve
         let spelling_filename = func_decl.range
                                          .clone()
                                          .unwrap()
-                                         .begin
+                                         .end
                                          .spelling_loc
                                          .unwrap()
                                          .file
                                          .to_string();
-        if func_decl.name.starts_with("isl_val_") {
+        println!("Parsing {} of {}", func_decl.name, spelling_filename);
+        if func_decl.name.starts_with("isl_")
+           && !UNSUPPORTED_FUNCS.contains(func_decl.name.as_str())
+        {
           if spelling_filename.starts_with("isl/include/") {
             // println!("Processing func {} in file {}.",
             //          func_decl.name, spelling_filename);
@@ -277,7 +318,7 @@ pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Ve
   return Ok(isl_functions);
 }
 
-pub fn extract_enums(filename: &String, state: &mut ParseState) -> Result<Vec<ISLEnum>> {
+pub fn extract_enums(filename: &String) -> Result<Vec<ISLEnum>> {
   let ast_json = cfile_to_json(filename)?;
   let t_unit: Node = serde_json::from_str(&ast_json.as_str())?;
   // println!("node={:#?}", t_unit);
@@ -303,7 +344,7 @@ pub fn extract_enums(filename: &String, state: &mut ParseState) -> Result<Vec<IS
                                              .file
                                              .to_string();
             if spelling_filename.starts_with("isl/include/") {
-              isl_enums.push(get_enum_from_decl(&enum_decl, &decl.inner, state)?)
+              isl_enums.push(get_enum_from_decl(&enum_decl, &decl.inner)?)
             }
           }
         }

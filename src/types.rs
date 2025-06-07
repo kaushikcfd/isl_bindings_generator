@@ -3,6 +3,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CType {
+  Void,
   Bool,
   I32,
   U32,
@@ -14,17 +15,59 @@ pub enum CType {
   CString,
   ISLArgs,
   ISLCtx,
+  ISLOptions,
   ISLDimType,
   ISLError,
+  ISLFold,
+  ISLStat,
+  ISLAff,
+  ISLAffList,
+  ISLMultiAff,
+  ISLLocalSpace,
+  ISLSpace,
   ISLId,
+  ISLIdList,
+  ISLMultiId,
   ISLBasicSet,
   ISLBasicSetList,
+  ISLBasicMap,
+  ISLBasicMapList,
   ISLPrinter,
   ISLSet,
+  ISLTerm,
+  ISLUnionSet,
+  ISLUnionSetList,
   ISLSetList,
+  ISLMap,
+  ISLUnionMap,
+  ISLUnionMapList,
+  ISLMapList,
   ISLMultiVal,
   ISLVal,
   ISLValList,
+  ISLVec,
+  ISLMat,
+  ISLPoint,
+  ISLConstraint,
+  ISLConstraintList,
+  ISLStrideInfo,
+  ISLFixedBox,
+  ISLUnionPwAff,
+  ISLUnionPwAffList,
+  ISLUnionPwMultiAffList,
+  ISLPwAff,
+  ISLPwAffList,
+  ISLPwMultiAff,
+  ISLPwMultiAffList,
+  ISLUnionPwMultiAff,
+  ISLMultiPwAff,
+  ISLMultiUnionPwAff,
+  ISLQPolynomial,
+  ISLQPolynomialFold,
+  ISLPwQPolynomialFold,
+  ISLPwQPolynomial,
+  ISLPwQPolynomialList,
+  ISLUnionPwQPolynomial,
   Unsupported,
 }
 
@@ -89,7 +132,7 @@ impl fmt::Display for ISLFunction {
 }
 
 pub fn ctype_from_string(s: &String) -> Result<CType> {
-  match s.as_str() {
+  match s.trim() {
     "int" => Ok(CType::I32),
     "unsigned int" => Ok(CType::U32),
     "long" => Ok(CType::I64),
@@ -100,21 +143,79 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     "struct isl_args *" => Ok(CType::ISLArgs),
     "isl_ctx *" | "struct isl_ctx *" => Ok(CType::ISLCtx),
     "isl_id *" | "struct isl_id *" => Ok(CType::ISLId),
-    "isl_basic_set *" | "struct isl_basic_set *" => Ok(CType::ISLBasicSet),
+    "isl_stride_info *" => Ok(CType::ISLStrideInfo),
+    "isl_fixed_box *" => Ok(CType::ISLFixedBox),
+    "isl_vec *" => Ok(CType::ISLVec),
+    "isl_mat *" => Ok(CType::ISLMat),
+    "isl_constraint *" | "struct isl_constraint *" => Ok(CType::ISLConstraint),
+    "isl_constraint_list *" | "struct isl_constraint_list *" => Ok(CType::ISLConstraintList),
+    "isl_point *" | "struct isl_point *" => Ok(CType::ISLPoint),
+    "isl_id_list *" | "struct isl_id_list *" => Ok(CType::ISLIdList),
+    "isl_multi_id *" | "struct isl_multi_id *" => Ok(CType::ISLMultiId),
+    "isl_basic_set *" | "struct isl_basic_set *" | "const isl_basic_set *" => {
+      Ok(CType::ISLBasicSet)
+    }
     "isl_basic_set_list *" | "struct isl_basic_set_list *" => Ok(CType::ISLBasicSetList),
     "isl_set *" | "struct isl_set *" => Ok(CType::ISLSet),
+    "isl_term *" | "struct isl_term *" => Ok(CType::ISLTerm),
+    "isl_union_set *" | "struct isl_union_set *" => Ok(CType::ISLUnionSet),
+    "isl_union_set_list *" | "struct isl_union_set_list *" => Ok(CType::ISLUnionSetList),
     "isl_set_list *" | "struct isl_set_list *" => Ok(CType::ISLSetList),
+    "isl_basic_map *" | "struct isl_basic_map *" | "const isl_basic_map *" => {
+      Ok(CType::ISLBasicMap)
+    }
+    "isl_basic_map_list *" | "struct isl_basic_map_list *" => Ok(CType::ISLBasicMapList),
+    "isl_map *" | "struct isl_map *" => Ok(CType::ISLMap),
+    "isl_union_map *" | "struct isl_union_map *" => Ok(CType::ISLUnionMap),
+    "isl_union_map_list *" | "struct isl_union_map_list *" => Ok(CType::ISLUnionMapList),
+    "isl_map_list *" | "struct isl_map_list *" => Ok(CType::ISLMapList),
     "isl_printer *" | "struct isl_printer *" => Ok(CType::ISLPrinter),
     "isl_val *" | "struct isl_val *" => Ok(CType::ISLVal),
     "isl_val_list *" | "struct isl_val_list *" => Ok(CType::ISLValList),
     "isl_multi_val *" | "struct isl_multi_val *" => Ok(CType::ISLMultiVal),
     "size_t" => Ok(CType::Sizet),
+    "enum isl_fold" => Ok(CType::ISLFold),
     "enum isl_error" => Ok(CType::ISLError),
     "enum isl_dim_type" => Ok(CType::ISLDimType),
-    "const char *" => Ok(CType::CString),
+    "const char *" | "char *" => Ok(CType::CString),
+    "uint32_t" => Ok(CType::U32),
+    "void" => Ok(CType::Void),
+    "isl_stat" => Ok(CType::ISLStat),
+    "isl_space *" => Ok(CType::ISLSpace),
+    "isl_local_space *" => Ok(CType::ISLLocalSpace),
+    "isl_aff *" | "struct isl_aff *" => Ok(CType::ISLAff),
+    "isl_qpolynomial *" | "struct isl_qpolynomial *" => Ok(CType::ISLQPolynomial),
+    "isl_qpolynomial_fold *" => Ok(CType::ISLQPolynomialFold),
+    "isl_pw_qpolynomial_fold *" => Ok(CType::ISLPwQPolynomialFold),
+    "isl_aff_list *" | "struct isl_aff_list *" => Ok(CType::ISLAffList),
+    "isl_pw_aff *" | "struct isl_pw_aff *" => Ok(CType::ISLPwAff),
+    "isl_pw_qpolynomial *" | "struct isl_pw_qpolynomial *" => Ok(CType::ISLPwQPolynomial),
+    "isl_pw_qpolynomial_list *" | "struct isl_pw_qpolynomial_list *" => {
+      Ok(CType::ISLPwQPolynomialList)
+    }
+    "isl_union_pw_qpolynomial *" | "struct isl_union_pw_qpolynomial *" => {
+      Ok(CType::ISLUnionPwQPolynomial)
+    }
+    "isl_union_pw_aff *" | "struct isl_union_pw_aff *" => Ok(CType::ISLUnionPwAff),
+    "isl_union_pw_aff_list *" | "struct isl_union_pw_aff_list *" => Ok(CType::ISLUnionPwAffList),
+    "isl_union_pw_multi_aff_list *" | "struct isl_union_pw_multi_aff_list *" => {
+      Ok(CType::ISLUnionPwMultiAffList)
+    }
+    "isl_pw_aff_list *" | "struct isl_pw_aff_list *" => Ok(CType::ISLPwAffList),
+    "isl_multi_aff *" => Ok(CType::ISLMultiAff),
+    "isl_pw_multi_aff *" | "struct isl_pw_multi_aff *" => Ok(CType::ISLPwMultiAff),
+    "isl_pw_multi_aff_list *" | "struct isl_pw_multi_aff_list *" => Ok(CType::ISLPwMultiAffList),
+    "isl_union_pw_multi_aff *" | "struct isl_union_pw_multi_aff *" => Ok(CType::ISLUnionPwMultiAff),
+    "isl_multi_pw_aff *" => Ok(CType::ISLMultiPwAff),
+    "isl_multi_union_pw_aff *" => Ok(CType::ISLMultiUnionPwAff),
+    "struct isl_options *" => Ok(CType::ISLOptions),
+    "isl_size" => Ok(CType::I32),
     "void *"
     | "const void *"
     | "char **"
+    | "int *"
+    | "isl_local_space **"
+    | "isl_qpolynomial **"
     | "isl_stat (*)(isl_basic_set *, void *)"
     | "isl_stat (*)(isl_basic_set_list *, void *)"
     | "isl_bool (*)(isl_basic_set *, void *)"
@@ -128,6 +229,103 @@ pub fn ctype_from_string(s: &String) -> Result<CType> {
     | "isl_bool (*)(isl_val *, void *)"
     | "isl_bool (*)(isl_val *, isl_val *, void *)"
     | "isl_val **"
+    | "isl_set **"
+    | "isl_basic_set *(*)(isl_basic_set *, void *)"
+    | "isl_set *(*)(isl_set *, void *)"
+    | "int (*)(struct isl_basic_set *, struct isl_basic_set *, void *)"
+    | "int (*)(struct isl_set *, struct isl_set *, void *)"
+    | "isl_stat (*)(isl_id *, void *)"
+    | "isl_bool (*)(isl_id *, void *)"
+    | "isl_id *(*)(isl_id *, void *)"
+    | "int (*)(struct isl_id *, struct isl_id *, void *)"
+    | "isl_bool (*)(isl_id *, isl_id *, void *)"
+    | "isl_stat (*)(isl_id_list *, void *)"
+    | "isl_val *(*)(isl_val *, void *)"
+    | "int (*)(struct isl_val *, struct isl_val *, void *)"
+    | "void (*)(void *)"
+    | "isl_mat **"
+    | "isl_constraint **"
+    | "isl_stat (*)(isl_constraint *, void *)"
+    | "isl_stat (*)(isl_constraint_list *, void *)"
+    | "isl_bool (*)(isl_constraint *, void *)"
+    | "isl_bool (*)(isl_constraint *, isl_constraint *, void *)"
+    | "isl_constraint *(*)(isl_constraint *, void *)"
+    | "int (*)(struct isl_constraint *, struct isl_constraint *, void *)"
+    | "isl_stat (*)(isl_constraint *, isl_constraint *, isl_basic_set *, void *)"
+    | "isl_stat (*)(isl_point *, void *)"
+    | "isl_stat (*)(isl_basic_map *, void *)"
+    | "isl_bool (*)(isl_basic_map *, void *)"
+    | "isl_basic_map *(*)(isl_basic_map *, void *)"
+    | "int (*)(struct isl_basic_map *, struct isl_basic_map *, void *)"
+    | "isl_bool (*)(isl_basic_map *, isl_basic_map *, void *)"
+    | "isl_stat (*)(isl_basic_map_list *, void *)"
+    | "isl_stat (*)(isl_map *, void *)"
+    | "isl_bool (*)(isl_map *, void *)"
+    | "isl_map *(*)(isl_map *, void *)"
+    | "int (*)(struct isl_map *, struct isl_map *, void *)"
+    | "isl_bool (*)(isl_map *, isl_map *, void *)"
+    | "isl_stat (*)(isl_map_list *, void *)"
+    | "isl_stat (*)(isl_union_map *, void *)"
+    | "isl_bool (*)(isl_union_map *, void *)"
+    | "isl_union_map *(*)(isl_union_map *, void *)"
+    | "int (*)(struct isl_union_map *, struct isl_union_map *, void *)"
+    | "isl_bool (*)(isl_union_map *, isl_union_map *, void *)"
+    | "isl_stat (*)(isl_union_map_list *, void *)"
+    | "isl_stat (*)(isl_union_set *, void *)"
+    | "isl_bool (*)(isl_union_set *, void *)"
+    | "isl_union_set *(*)(isl_union_set *, void *)"
+    | "int (*)(struct isl_union_set *, struct isl_union_set *, void *)"
+    | "isl_bool (*)(isl_union_set *, isl_union_set *, void *)"
+    | "isl_stat (*)(isl_union_set_list *, void *)"
+    | "isl_stat (*)(isl_set *, isl_aff *, void *)"
+    | "isl_bool (*)(isl_set *, isl_aff *, void *)"
+    | "isl_bool *"
+    | "isl_stat (*)(isl_set *, isl_multi_aff *, void *)"
+    | "isl_bool (*)(isl_set *, isl_multi_aff *, void *)"
+    | "isl_stat (*)(isl_pw_multi_aff *, void *)"
+    | "isl_bool (*)(isl_pw_multi_aff *, void *)"
+    | "isl_stat (*)(isl_pw_aff *, void *)"
+    | "isl_bool (*)(isl_pw_aff *, void *)"
+    | "isl_stat (*)(isl_aff *, void *)"
+    | "isl_bool (*)(isl_aff *, void *)"
+    | "isl_aff *(*)(isl_aff *, void *)"
+    | "int (*)(struct isl_aff *, struct isl_aff *, void *)"
+    | "isl_bool (*)(isl_aff *, isl_aff *, void *)"
+    | "isl_stat (*)(isl_aff_list *, void *)"
+    | "isl_pw_aff *(*)(isl_pw_aff *, void *)"
+    | "int (*)(struct isl_pw_aff *, struct isl_pw_aff *, void *)"
+    | "isl_bool (*)(isl_pw_aff *, isl_pw_aff *, void *)"
+    | "isl_stat (*)(isl_pw_aff_list *, void *)"
+    | "isl_pw_multi_aff *(*)(isl_pw_multi_aff *, void *)"
+    | "int (*)(struct isl_pw_multi_aff *, struct isl_pw_multi_aff *, void *)"
+    | "isl_bool (*)(isl_pw_multi_aff *, isl_pw_multi_aff *, void *)"
+    | "isl_stat (*)(isl_pw_multi_aff_list *, void *)"
+    | "isl_stat (*)(isl_union_pw_aff *, void *)"
+    | "isl_bool (*)(isl_union_pw_aff *, void *)"
+    | "isl_union_pw_aff *(*)(isl_union_pw_aff *, void *)"
+    | "int (*)(struct isl_union_pw_aff *, struct isl_union_pw_aff *, void *)"
+    | "isl_bool (*)(isl_union_pw_aff *, isl_union_pw_aff *, void *)"
+    | "isl_stat (*)(isl_union_pw_aff_list *, void *)"
+    | "isl_stat (*)(isl_union_pw_multi_aff *, void *)"
+    | "isl_bool (*)(isl_union_pw_multi_aff *, void *)"
+    | "isl_union_pw_multi_aff *(*)(isl_union_pw_multi_aff *, void *)"
+    | "int (*)(struct isl_union_pw_multi_aff *, struct isl_union_pw_multi_aff *, void *)"
+    | "isl_bool (*)(isl_union_pw_multi_aff *, isl_union_pw_multi_aff *, void *)"
+    | "isl_stat (*)(isl_union_pw_multi_aff_list *, void *)"
+    | "isl_stat (*)(isl_basic_set *, isl_qpolynomial *, void *)"
+    | "isl_stat (*)(isl_term *, void *)"
+    | "isl_bool (*)(isl_term *, void *)"
+    | "isl_term *(*)(isl_term *, void *)"
+    | "int (*)(struct isl_term *, struct isl_term *, void *)"
+    | "isl_bool (*)(isl_term *, isl_term *, void *)"
+    | "isl_stat (*)(isl_set *, isl_qpolynomial *, void *)"
+    | "isl_bool (*)(isl_set *, isl_qpolynomial *, void *)"
+    | "isl_stat (*)(isl_qpolynomial *, void *)"
+    | "isl_pw_qpolynomial *(*)(isl_basic_set *)"
+    | "isl_stat (*)(isl_set *, isl_qpolynomial_fold *, void *)"
+    | "isl_bool (*)(isl_set *, isl_qpolynomial_fold *, void *)"
+    | "isl_stat (*)(isl_pw_qpolynomial *, void *)"
+    | "isl_bool (*)(isl_pw_qpolynomial *, void *)"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
   }
@@ -144,6 +342,7 @@ pub fn is_primitive_ctype(type_: CType) -> bool {
     | CType::F64
     | CType::Sizet
     | CType::ISLDimType
+    | CType::ISLFold
     | CType::ISLError => true,
     _ => false,
   }
