@@ -18,16 +18,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+mod codegen;
 mod cparse;
 mod types;
 
+use ::codegen::Scope;
 use cparse::{extract_functions, ParseState};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+use crate::codegen::generate_fn_bindings;
+use crate::codegen::write_bindings;
 use crate::cparse::extract_enums;
+use crate::types::ctype_from_string;
+use crate::types::get_rust_typename;
 use crate::types::ISLEnum;
 use crate::types::ISLFunction;
 use lazy_static::lazy_static;
@@ -120,10 +126,7 @@ fn isl_enums_parse_fallback(isl_enums: &mut HashSet<ISLEnum>) {
 }
 
 pub fn main() {
-  if Path::new("src/bindings/").is_dir() {
-    fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
-  }
-  fs::create_dir("src/bindings/").unwrap();
+  // {{{ Parsing
 
   let mut parse_state = ParseState { file_to_string: HashMap::new() };
   let mut isl_functions: HashSet<ISLFunction> = HashSet::new();
@@ -138,16 +141,41 @@ pub fn main() {
   } else {
     isl_enums_parse_fallback(&mut isl_enums);
   }
-  for isl_enum in isl_enums {
-    println!("Enum: {}.", isl_enum);
-  }
 
   for isl_header in ISL_HEADERS.iter() {
     isl_functions.extend(extract_functions(&(format!("isl/include/isl/{}", isl_header).to_string()),
                                            &mut parse_state).unwrap());
   }
 
-  for isl_func in isl_functions {
-    println!("Function: {}.", isl_func);
+  // }}}
+
+  // {{{ Codegen
+
+  let mut mod_rs_scope = Scope::new();
+  let mut binding_rs_scope = Scope::new();
+
+  if Path::new("src/bindings/").is_dir() {
+    fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
   }
+  fs::create_dir("src/bindings/").unwrap();
+
+  for isl_typename in ["isl_ctx"] {
+    let submodule_name = isl_typename[4..].to_string();
+    let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);
+    let rust_ty_name =
+      get_rust_typename(ctype_from_string(&format!("{} *", isl_typename)).unwrap()).unwrap();
+
+    let mut submodule_scope = Scope::new();
+    generate_fn_bindings(&mut submodule_scope,
+                         rust_ty_name,
+                         isl_typename,
+                         &isl_functions);
+
+    mod_rs_scope.raw(format!("mod {};", submodule_name).as_str());
+    mod_rs_scope.raw(format!("pub use {}::{};", submodule_name, rust_ty_name).as_str());
+  }
+
+  // }}}
 }
+
+// vim: fdm=marker
