@@ -59,6 +59,66 @@ lazy_static! {
                                                       "schedule.h",];
 }
 
+fn isl_enums_parse_fallback(isl_enums: &mut HashSet<ISLEnum>) {
+  isl_enums.insert(ISLEnum::new("isl_arg_type",
+                                ["isl_arg_end",
+                                 "isl_arg_alias",
+                                 "isl_arg_arg",
+                                 "isl_arg_bool",
+                                 "isl_arg_child",
+                                 "isl_arg_choice",
+                                 "isl_arg_flags",
+                                 "isl_arg_footer",
+                                 "isl_arg_int",
+                                 "isl_arg_user",
+                                 "isl_arg_long",
+                                 "isl_arg_ulong",
+                                 "isl_arg_str",
+                                 "isl_arg_str_list",
+                                 "isl_arg_version"],
+                                0..15));
+  isl_enums.insert(ISLEnum::new("isl_schedule_node_type",
+                                ["isl_schedule_node_error",
+                                 "isl_schedule_node_band",
+                                 "isl_schedule_node_context",
+                                 "isl_schedule_node_domain",
+                                 "isl_schedule_node_expansion",
+                                 "isl_schedule_node_extension",
+                                 "isl_schedule_node_filter",
+                                 "isl_schedule_node_leaf",
+                                 "isl_schedule_node_guard",
+                                 "isl_schedule_node_mark",
+                                 "isl_schedule_node_sequence",
+                                 "isl_schedule_node_set"],
+                                -1..11));
+  isl_enums.insert(ISLEnum::new("isl_dim_type",
+                                ["isl_dim_cst",
+                                 "isl_dim_param",
+                                 "isl_dim_in",
+                                 "isl_dim_out",
+                                 "isl_dim_set",
+                                 "isl_dim_div",
+                                 "isl_dim_all"],
+                                [0, 1, 2, 3, 3, 4, 5]));
+  isl_enums.insert(ISLEnum::new("isl_fold",
+                                ["isl_fold_error",
+                                 "isl_fold_min",
+                                 "isl_fold_max",
+                                 "isl_fold_list"],
+                                -1..3));
+  isl_enums.insert(ISLEnum::new("isl_error",
+                                ["isl_error_none",
+                                 "isl_error_abort",
+                                 "isl_error_alloc",
+                                 "isl_error_unknown",
+                                 "isl_error_internal",
+                                 "isl_error_invalid",
+                                 "isl_error_quota",
+                                 "isl_error_unsupported"],
+                                0..8));
+  isl_enums.insert(ISLEnum::new("isl_stat", ["isl_stat_error", "isl_stat_ok"], [-1, 0]));
+}
+
 pub fn main() {
   if Path::new("src/bindings/").is_dir() {
     fs::remove_dir_all("src/bindings/").expect("Removing `src/bindings` failed.");
@@ -69,13 +129,18 @@ pub fn main() {
   let mut isl_functions: HashSet<ISLFunction> = HashSet::new();
   let mut isl_enums: HashSet<ISLEnum> = HashSet::new();
 
-  for isl_header in ISL_HEADERS.iter() {
-    isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string())).unwrap());
+  if false {
+    // FIXME: There is a bug in the extract_enums where the values are not
+    // correctly populated.
+    for isl_header in ISL_HEADERS.iter() {
+      isl_enums.extend(extract_enums(&(format!("isl/include/isl/{}", isl_header).to_string())).unwrap());
+    }
+  } else {
+    isl_enums_parse_fallback(&mut isl_enums);
   }
   for isl_enum in isl_enums {
     println!("Enum: {}.", isl_enum);
   }
-  // FIXME: Register enum isl_stat by hand.
 
   for isl_header in ISL_HEADERS.iter() {
     isl_functions.extend(extract_functions(&(format!("isl/include/isl/{}", isl_header).to_string()),
