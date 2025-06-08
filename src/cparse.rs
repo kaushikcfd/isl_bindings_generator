@@ -273,8 +273,7 @@ fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>) -> Result<ISLEnum
   // println!("Enum: {}",
   //          ISLEnum { name: enum_decl.name.clone().unwrap(),
   //                    variants: variants.clone() });
-  return Ok(ISLEnum { name: enum_decl.name.clone().unwrap(),
-                      variants: variants });
+  return Ok(ISLEnum::new(enum_decl.name.clone().unwrap(), variants, []));
 }
 
 pub fn extract_functions(filename: &String, state: &mut ParseState) -> Result<Vec<ISLFunction>> {

@@ -114,6 +114,23 @@ pub struct ISLFunction {
 pub struct ISLEnum {
   pub name: String,
   pub variants: Vec<String>,
+  pub values: Vec<i32>,
+}
+
+impl ISLEnum {
+  pub fn new<N, V, VI, I>(name: N, variants: V, values: I) -> Self
+    where N: ToString,
+          V: IntoIterator<Item = VI>,
+          VI: ToString,
+          I: IntoIterator<Item = i32>
+  {
+    let variants: Vec<String> = variants.into_iter().map(|v| v.to_string()).collect();
+    let values: Vec<i32> = values.into_iter().collect();
+    assert_eq!(variants.len(), values.len());
+    ISLEnum { name: name.to_string(),
+              variants: variants,
+              values: values }
+  }
 }
 
 impl fmt::Display for ISLEnum {
