@@ -154,7 +154,10 @@ impl fmt::Display for ISLFunction {
   }
 }
 
-pub fn ctype_from_string(s: &String) -> Result<CType> {
+pub fn ctype_from_string<S>(s: &S) -> Result<CType>
+  where S: ToString
+{
+  let s = s.to_string();
   match s.trim() {
     "int" => Ok(CType::I32),
     "unsigned int" => Ok(CType::U32),
@@ -397,5 +400,82 @@ pub fn is_primitive_ctype(type_: CType) -> bool {
     | CType::ISLFold
     | CType::ISLError => true,
     _ => false,
+  }
+}
+
+pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
+  match type_ {
+    CType::Void => Ok("()"),
+    CType::Bool => Ok("bool"),
+    CType::I32 => Ok("i32"),
+    CType::U32 => Ok("u32"),
+    CType::I64 => Ok("i64"),
+    CType::U64 => Ok("u64"),
+    CType::F32 => Ok("f32"),
+    CType::F64 => Ok("f64"),
+    CType::Sizet => Ok("usize"),
+    CType::CString => Ok("CString"),
+    CType::ISLArgs => Ok("Args"),
+    CType::ISLCtx => Ok("Context"),
+    CType::ISLOptions => Ok("Options"),
+    CType::ISLDimType => Ok("DimType"),
+    CType::ISLError => Ok("Error"),
+    CType::ISLFold => Ok("Fold"),
+    CType::ISLStat => Ok("Stat"),
+    CType::ISLAff => Ok("Aff"),
+    CType::ISLAffList => Ok("AffList"),
+    CType::ISLMultiAff => Ok("MultiAff"),
+    CType::ISLLocalSpace => Ok("LocalSpace"),
+    CType::ISLSpace => Ok("Space"),
+    CType::ISLId => Ok("Id"),
+    CType::ISLIdList => Ok("IdList"),
+    CType::ISLMultiId => Ok("MultiId"),
+    CType::ISLBasicSet => Ok("BasicSet"),
+    CType::ISLBasicSetList => Ok("BasicSetList"),
+    CType::ISLBasicMap => Ok("BasicMap"),
+    CType::ISLBasicMapList => Ok("BasicMapList"),
+    CType::ISLPrinter => Ok("Printer"),
+    CType::ISLSet => Ok("Set"),
+    CType::ISLTerm => Ok("Term"),
+    CType::ISLUnionSet => Ok("UnionSet"),
+    CType::ISLUnionSetList => Ok("UnionSetList"),
+    CType::ISLSetList => Ok("SetList"),
+    CType::ISLMap => Ok("Map"),
+    CType::ISLUnionMap => Ok("UnionMap"),
+    CType::ISLUnionMapList => Ok("UnionMapList"),
+    CType::ISLMapList => Ok("MapList"),
+    CType::ISLMultiVal => Ok("MultiVal"),
+    CType::ISLVal => Ok("Val"),
+    CType::ISLValList => Ok("ValList"),
+    CType::ISLVec => Ok("Vec"),
+    CType::ISLMat => Ok("Mat"),
+    CType::ISLPoint => Ok("Point"),
+    CType::ISLConstraint => Ok("Constraint"),
+    CType::ISLConstraintList => Ok("ConstraintList"),
+    CType::ISLStrideInfo => Ok("StrideInfo"),
+    CType::ISLFixedBox => Ok("FixedBox"),
+    CType::ISLUnionPwAff => Ok("UnionPwAff"),
+    CType::ISLUnionPwAffList => Ok("UnionPwAffList"),
+    CType::ISLUnionPwMultiAffList => Ok("UnionPwMultiAffList"),
+    CType::ISLPwAff => Ok("PwAff"),
+    CType::ISLPwAffList => Ok("PwAffList"),
+    CType::ISLPwMultiAff => Ok("PwMultiAff"),
+    CType::ISLPwMultiAffList => Ok("PwMultiAffList"),
+    CType::ISLUnionPwMultiAff => Ok("UnionPwMultiAff"),
+    CType::ISLMultiPwAff => Ok("MultiPwAff"),
+    CType::ISLMultiUnionPwAff => Ok("MultiUnionPwAff"),
+    CType::ISLQPolynomial => Ok("QPolynomial"),
+    CType::ISLQPolynomialList => Ok("QPolynomialList"),
+    CType::ISLQPolynomialFold => Ok("QPolynomialFold"),
+    CType::ISLPwQPolynomialFold => Ok("PwQPolynomialFold"),
+    CType::ISLUnionPwQPolynomialFold => Ok("UnionPwQPolynomialFold"),
+    CType::ISLPwQPolynomialFoldList => Ok("PwQPolynomialFoldList"),
+    CType::ISLPwQPolynomial => Ok("PwQPolynomial"),
+    CType::ISLPwQPolynomialList => Ok("PwQPolynomialList"),
+    CType::ISLUnionPwQPolynomial => Ok("UnionPwQPolynomial"),
+    CType::ISLSchedule => Ok("Schedule"),
+    CType::ISLScheduleNode => Ok("ScheduleNode"),
+    CType::ISLScheduleConstaints => Ok("ScheduleConstaints"),
+    CType::Unsupported => bail!("Cannot convert this type to rust!"),
   }
 }
