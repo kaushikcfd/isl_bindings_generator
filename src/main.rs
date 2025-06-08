@@ -21,6 +21,7 @@
 mod codegen;
 mod cparse;
 mod types;
+mod utils;
 
 use ::codegen::Scope;
 use cparse::{extract_functions, ParseState};
@@ -30,10 +31,11 @@ use std::fs;
 use std::path::Path;
 
 use crate::codegen::generate_fn_bindings;
-use crate::codegen::write_bindings;
 use crate::cparse::extract_enums;
 use crate::types::ctype_from_string;
+use crate::types::get_isl_struct_name;
 use crate::types::get_rust_typename;
+use crate::types::CType;
 use crate::types::ISLEnum;
 use crate::types::ISLFunction;
 use lazy_static::lazy_static;
@@ -159,17 +161,15 @@ pub fn main() {
   }
   fs::create_dir("src/bindings/").unwrap();
 
-  for isl_typename in ["isl_ctx"] {
+  for isl_type in [CType::ISLCtx] {
+    let isl_typename = get_isl_struct_name(isl_type).unwrap();
     let submodule_name = isl_typename[4..].to_string();
     let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);
     let rust_ty_name =
       get_rust_typename(ctype_from_string(&format!("{} *", isl_typename)).unwrap()).unwrap();
 
     let mut submodule_scope = Scope::new();
-    generate_fn_bindings(&mut submodule_scope,
-                         rust_ty_name,
-                         isl_typename,
-                         &isl_functions);
+    generate_fn_bindings(&mut submodule_scope, isl_type, &isl_functions).unwrap();
 
     mod_rs_scope.raw(format!("mod {};", submodule_name).as_str());
     mod_rs_scope.raw(format!("pub use {}::{};", submodule_name, rust_ty_name).as_str());
