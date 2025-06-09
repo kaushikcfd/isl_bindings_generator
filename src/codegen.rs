@@ -18,15 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use std::collections::{HashMap, HashSet};
+use convert_case::{Case, Casing};
+use std::collections::HashSet;
 
 use anyhow::{bail, Result};
 use codegen::{Function, Scope};
 
 use crate::{
   types::{
-    get_isl_struct_name, get_rust_typename, get_typename_in_extern_block, CType, ISLBorrowRule,
-    ISLFunction,
+    ctype_from_string, get_isl_struct_name, get_rust_typename, get_typename_in_extern_block, CType,
+    ISLBorrowRule, ISLEnum, ISLFunction,
   },
   utils::guard_identifier,
 };
@@ -424,4 +425,43 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
   // }}}
 
   return Ok(());
+}
+
+pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim: &str)
+                      -> Result<()> {
+  let rust_ty_name = get_rust_typename(ctype_from_string(&enum_.name)?)?;
+  let enum_def = scope.new_enum(rust_ty_name)
+                      .vis("pub")
+                      .derive("Debug")
+                      .derive("Clone")
+                      .derive("Copy")
+                      .derive("PartialEq")
+                      .derive("Eq");
+
+  for variant in &enum_.variants {
+    assert_eq!(variant[..variant_prefix_to_trim.len()],
+               variant_prefix_to_trim.to_string());
+    let variant_name_in_rust =
+      guard_identifier(&variant[variant_prefix_to_trim.len()..].to_string()
+                                                               .to_case(Case::Pascal));
+    enum_def.new_variant(&variant_name_in_rust);
+  }
+
+  let toi32 = scope.new_impl(rust_ty_name)
+                   .new_fn("to_i32")
+                   .vis("pub")
+                   .doc(format!("Returns i32 values as defined in libisl.").as_str());
+  for (variant, value) in enum_.variants.iter().zip(enum_.values) {
+    assert_eq!(variant[..variant_prefix_to_trim.len()],
+               variant_prefix_to_trim.to_string());
+    let variant_name_in_rust =
+      guard_identifier(&variant[variant_prefix_to_trim.len()..].to_string()
+                                                               .to_case(Case::Pascal));
+    toi32.line(format!("  {}::{} => {},", rust_ty_name, variant_name_in_rust, value));
+  }
+  toi32.arg_ref_self();
+  toi32.line("match self {");
+  toi32.line("}");
+
+  bail!("Not yet implemented.")
 }
