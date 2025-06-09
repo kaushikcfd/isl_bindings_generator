@@ -30,6 +30,7 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
+use crate::codegen::generate_enums;
 use crate::codegen::generate_fn_bindings;
 use crate::cparse::extract_enums;
 use crate::types::ctype_from_string;
@@ -65,40 +66,45 @@ lazy_static! {
                                                       "fixed_box.h",
                                                       "printer.h",
                                                       "schedule.h",];
+  static ref ISL_ENUM_TO_PREFIX: HashMap<CType, &'static str> =
+    HashMap::from([(CType::ISLDimType, "isl_dim_"),
+                   (CType::ISLFold, "isl_fold_"),
+                   (CType::ISLError, "isl_error_"),
+                   (CType::ISLStat, "isl_stat_")]);
 }
 
 fn isl_enums_parse_fallback(isl_enums: &mut HashSet<ISLEnum>) {
-  isl_enums.insert(ISLEnum::new("isl_arg_type",
-                                ["isl_arg_end",
-                                 "isl_arg_alias",
-                                 "isl_arg_arg",
-                                 "isl_arg_bool",
-                                 "isl_arg_child",
-                                 "isl_arg_choice",
-                                 "isl_arg_flags",
-                                 "isl_arg_footer",
-                                 "isl_arg_int",
-                                 "isl_arg_user",
-                                 "isl_arg_long",
-                                 "isl_arg_ulong",
-                                 "isl_arg_str",
-                                 "isl_arg_str_list",
-                                 "isl_arg_version"],
-                                0..15));
-  isl_enums.insert(ISLEnum::new("isl_schedule_node_type",
-                                ["isl_schedule_node_error",
-                                 "isl_schedule_node_band",
-                                 "isl_schedule_node_context",
-                                 "isl_schedule_node_domain",
-                                 "isl_schedule_node_expansion",
-                                 "isl_schedule_node_extension",
-                                 "isl_schedule_node_filter",
-                                 "isl_schedule_node_leaf",
-                                 "isl_schedule_node_guard",
-                                 "isl_schedule_node_mark",
-                                 "isl_schedule_node_sequence",
-                                 "isl_schedule_node_set"],
-                                -1..11));
+  // isl_enums.insert(ISLEnum::new("isl_arg_type",
+  //                               ["isl_arg_end",
+  //                                "isl_arg_alias",
+  //                                "isl_arg_arg",
+  //                                "isl_arg_bool",
+  //                                "isl_arg_child",
+  //                                "isl_arg_choice",
+  //                                "isl_arg_flags",
+  //                                "isl_arg_footer",
+  //                                "isl_arg_int",
+  //                                "isl_arg_user",
+  //                                "isl_arg_long",
+  //                                "isl_arg_ulong",
+  //                                "isl_arg_str",
+  //                                "isl_arg_str_list",
+  //                                "isl_arg_version"],
+  //                               0..15));
+  // isl_enums.insert(ISLEnum::new("isl_schedule_node_type",
+  //                               ["isl_schedule_node_error",
+  //                                "isl_schedule_node_band",
+  //                                "isl_schedule_node_context",
+  //                                "isl_schedule_node_domain",
+  //                                "isl_schedule_node_expansion",
+  //                                "isl_schedule_node_extension",
+  //                                "isl_schedule_node_filter",
+  //                                "isl_schedule_node_leaf",
+  //                                "isl_schedule_node_guard",
+  //                                "isl_schedule_node_mark",
+  //                                "isl_schedule_node_sequence",
+  //                                "isl_schedule_node_set"],
+  //                               -1..11));
   isl_enums.insert(ISLEnum::new("isl_dim_type",
                                 ["isl_dim_cst",
                                  "isl_dim_param",
@@ -165,8 +171,7 @@ pub fn main() {
     let isl_typename = get_isl_struct_name(isl_type).unwrap();
     let submodule_name = isl_typename[4..].to_string();
     let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);
-    let rust_ty_name =
-      get_rust_typename(ctype_from_string(&format!("{} *", isl_typename)).unwrap()).unwrap();
+    let rust_ty_name = get_rust_typename(isl_type).unwrap();
 
     let mut submodule_scope = Scope::new();
     generate_fn_bindings(&mut submodule_scope, isl_type, &isl_functions).unwrap();
@@ -176,6 +181,22 @@ pub fn main() {
   }
 
   // }}}
+
+  {
+    let mut submodule_scope = Scope::new();
+    let submodule_name = "enums";
+    let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);
+    mod_rs_scope.raw(format!("mod {};", submodule_name));
+    for isl_enum in isl_enums {
+      let rust_ty = ctype_from_string(&isl_enum.name).unwrap();
+      let rust_ty_name = get_rust_typename(rust_ty).unwrap();
+      generate_enums(&mut submodule_scope,
+                     isl_enum,
+                     ISL_ENUM_TO_PREFIX.get(&rust_ty).unwrap()).unwrap();
+
+      mod_rs_scope.raw(format!("pub use {}::{};", submodule_name, rust_ty_name).as_str());
+    }
+  }
 }
 
 // vim: fdm=marker
