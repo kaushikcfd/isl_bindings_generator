@@ -122,9 +122,10 @@ pub struct ISLFunction {
 
 impl ISLFunction {
   pub fn has_all_known_types(&self) -> bool {
-    !self.parameters
-         .iter()
-         .any(|p| p.type_ == CType::Unsupported)
+    !(self.parameters
+          .iter()
+          .any(|p| p.type_ == CType::Unsupported)
+      || self.ret_type == CType::Unsupported)
   }
 
   pub fn make_identifiers_rust_legal(self) -> Self {
@@ -232,9 +233,9 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "isl_val_list *" | "struct isl_val_list *" => Ok(CType::ISLValList),
     "isl_multi_val *" | "struct isl_multi_val *" => Ok(CType::ISLMultiVal),
     "size_t" => Ok(CType::Sizet),
-    "enum isl_fold" => Ok(CType::ISLFold),
-    "enum isl_error" => Ok(CType::ISLError),
-    "enum isl_dim_type" => Ok(CType::ISLDimType),
+    "enum isl_fold" | "isl_fold" => Ok(CType::ISLFold),
+    "enum isl_error" | "isl_error" => Ok(CType::ISLError),
+    "enum isl_dim_type" | "isl_dim_type" => Ok(CType::ISLDimType),
     "const char *" | "char *" => Ok(CType::CString),
     "uint32_t" => Ok(CType::U32),
     "void" => Ok(CType::Void),

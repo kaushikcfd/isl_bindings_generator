@@ -130,12 +130,13 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
     | CType::F32
     | CType::F64
     | CType::Sizet
-    | CType::ISLDimType
-    | CType::ISLError
-    | CType::ISLFold
-    | CType::ISLStat
     | CType::ISLBool => {
-      assert_eq!(borrow, ISLBorrowRule::IslKeep);
+      assert_eq!(borrow, ISLBorrowRule::PassByValue);
+      Ok(())
+    }
+    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat => {
+      assert_eq!(borrow, ISLBorrowRule::PassByValue);
+      method.line(format!("let {} = {}.to_i32();", arg_name, arg_name));
       Ok(())
     }
     CType::CString => {
@@ -359,7 +360,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
                        .collect::<Vec<String>>()
                        .join(", ");
     let ret_str = get_typename_in_extern_block(func.ret_type)?;
-    scope.raw(format!("    fn {}({}){};", func.name.clone(), args_str, ret_str));
+    scope.raw(format!("    fn {}({}) -> {};", func.name.clone(), args_str, ret_str));
   }
   scope.raw("}");
 
@@ -370,9 +371,10 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
     let mut method = impl_scope.new_fn(method_name.as_str())
                                .vis("pub")
                                .doc(format!("Wraps `{}`.", func.name).as_str());
+    println!("Generating code for {}", func);
 
     let mut arg_names_in_fn_body: Vec<&str> = vec![];
-    if func.parameters[0].type_ == type_ {
+    if func.parameters.len() > 0 && func.parameters[0].type_ == type_ {
       match func.parameters[0].borrow {
         ISLBorrowRule::IslKeep => {
           method.arg_ref_self();
@@ -396,6 +398,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
                  borrow_str + get_rust_typename(param.type_)?);
       shadow_var_before_passing_to_isl_c(&mut method, param.type_, &param.name, param.borrow)?;
     }
+    method.ret(get_rust_typename(func.ret_type)?);
 
     let passed_args_str = func.parameters
                               .iter()
@@ -463,5 +466,5 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
   toi32.line("match self {");
   toi32.line("}");
 
-  bail!("Not yet implemented.")
+  return Ok(());
 }
