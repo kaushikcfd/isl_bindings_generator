@@ -335,9 +335,13 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
   // Import necessary types.
   for func in &isl_functions {
     for p in &func.parameters {
-      imports_for_type(p.type_, scope)?;
+      if p.type_ != type_ {
+        imports_for_type(p.type_, scope)?;
+      }
     }
-    imports_for_type(func.ret_type, scope)?;
+    if func.ret_type != type_ {
+      imports_for_type(func.ret_type, scope)?;
+    }
   }
 
   // Define the struct for type_
@@ -454,6 +458,7 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
                    .new_fn("to_i32")
                    .vis("pub")
                    .doc(format!("Returns i32 values as defined in libisl.").as_str());
+  toi32.line("match self {");
   for (variant, value) in enum_.variants.iter().zip(enum_.values) {
     assert_eq!(variant[..variant_prefix_to_trim.len()],
                variant_prefix_to_trim.to_string());
@@ -463,7 +468,7 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
     toi32.line(format!("  {}::{} => {},", rust_ty_name, variant_name_in_rust, value));
   }
   toi32.arg_ref_self();
-  toi32.line("match self {");
+  toi32.ret("i32");
   toi32.line("}");
 
   return Ok(());
