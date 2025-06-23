@@ -519,12 +519,10 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::U64
     | CType::F32
     | CType::F64
-    | CType::Sizet
-    | CType::ISLDimType
-    | CType::ISLError
-    | CType::ISLFold
-    | CType::ISLStat => get_rust_typename(type_),
-    CType::ISLBool => Ok("i32"),
+    | CType::Sizet => get_rust_typename(type_),
+    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat | CType::ISLBool => {
+      Ok("i32")
+    }
     CType::CString => Ok("*const c_char"),
     CType::ISLArgs
     | CType::ISLCtx
