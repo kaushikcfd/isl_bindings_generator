@@ -203,12 +203,7 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
     | CType::ISLScheduleNode
     | CType::ISLScheduleConstaints => {
       match borrow {
-        ISLBorrowRule::IslKeep => {
-          method.line(format!("let mut {} = {};", arg_name, arg_name));
-          method.line(format!("{}.do_not_free_on_drop();", arg_name));
-          method.line(format!("let {} = {}.ptr;", arg_name, arg_name));
-        }
-        ISLBorrowRule::IslTake => {
+        ISLBorrowRule::IslKeep | ISLBorrowRule::IslTake => {
           method.line(format!("let {} = {}.ptr;", arg_name, arg_name));
         }
         _ => bail!("Unexpected borrow"),
@@ -229,11 +224,14 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
     | CType::U64
     | CType::F32
     | CType::F64
-    | CType::Sizet
-    | CType::ISLDimType
-    | CType::ISLError
-    | CType::ISLFold
-    | CType::ISLStat => Ok(()),
+    | CType::Sizet => Ok(()),
+    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat => {
+      method.line(format!("let {} = {}::from_i32({});",
+                          return_var,
+                          get_rust_typename(isl_func.ret_type)?,
+                          return_var));
+      Ok(())
+    }
     CType::ISLBool => {
       method.line(format!("let {} = match {} {{", return_var, return_var));
       method.line("    0 => false,");
@@ -360,7 +358,11 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
     // See https://gitlab.com/IovoslavIovchev/codegen/-/issues/11
     let args_str = func.parameters
                        .iter()
-                       .map(|p| get_typename_in_extern_block(p.type_).unwrap().to_string())
+                       .map(|p| {
+                         format!("{}: {}",
+                                 p.name,
+                                 get_typename_in_extern_block(p.type_).unwrap())
+                       })
                        .collect::<Vec<String>>()
                        .join(", ");
     let ret_str = get_typename_in_extern_block(func.ret_type)?;
@@ -389,7 +391,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
         _ => bail!("Self can only be take or keep."),
       };
       arg_names_in_fn_body.push("self");
-      method.line(format!("let {} = {};", func.parameters[0].name, "self"));
+      method.line(format!("let {} = {}.ptr;", func.parameters[0].name, "self"));
     }
     // Add parameters to the binding function.
     for param in func.parameters[arg_names_in_fn_body.len()..].iter() {
@@ -454,12 +456,14 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
     enum_def.new_variant(&variant_name_in_rust);
   }
 
+  // {{{ Implement toi32
+
   let toi32 = scope.new_impl(rust_ty_name)
                    .new_fn("to_i32")
                    .vis("pub")
                    .doc(format!("Returns i32 values as defined in libisl.").as_str());
   toi32.line("match self {");
-  for (variant, value) in enum_.variants.iter().zip(enum_.values) {
+  for (variant, value) in enum_.variants.iter().zip(enum_.values.clone()) {
     assert_eq!(variant[..variant_prefix_to_trim.len()],
                variant_prefix_to_trim.to_string());
     let variant_name_in_rust =
@@ -470,6 +474,32 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
   toi32.arg_ref_self();
   toi32.ret("i32");
   toi32.line("}");
+
+  // }}}
+
+  // {{{ Implement fromi32
+
+  let fromi32 =
+    scope.new_impl(rust_ty_name)
+         .new_fn("from_i32")
+         .vis("pub")
+         .doc(format!("Constructor based on the i32 values as defined in libisl.").as_str());
+  fromi32.line("match val {");
+  for (variant, value) in enum_.variants.iter().zip(enum_.values) {
+    assert_eq!(variant[..variant_prefix_to_trim.len()],
+               variant_prefix_to_trim.to_string());
+    let variant_name_in_rust =
+      guard_identifier(&variant[variant_prefix_to_trim.len()..].to_string()
+                                                               .to_case(Case::Pascal));
+    fromi32.line(format!("  {} => {}::{},", value, rust_ty_name, variant_name_in_rust));
+  }
+
+  fromi32.arg("val", "i32");
+  fromi32.ret("Self");
+  fromi32.line("  _ => panic!(\"Illegal value.\"),");
+  fromi32.line("}");
+
+  // }}}
 
   return Ok(());
 }
