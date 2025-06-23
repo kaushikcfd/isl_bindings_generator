@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use strum::IntoEnumIterator;
 
 use crate::codegen::generate_enums;
 use crate::codegen::generate_fn_bindings;
@@ -36,6 +37,7 @@ use crate::cparse::extract_enums;
 use crate::types::ctype_from_string;
 use crate::types::get_isl_struct_name;
 use crate::types::get_rust_typename;
+use crate::types::is_isl_struct_type;
 use crate::types::CType;
 use crate::types::ISLEnum;
 use crate::types::ISLFunction;
@@ -166,7 +168,7 @@ pub fn main() {
   }
   fs::create_dir("src/bindings/").unwrap();
 
-  for isl_type in [CType::ISLCtx] {
+  for isl_type in CType::iter().filter(|t| is_isl_struct_type(t.clone())) {
     let isl_typename = get_isl_struct_name(isl_type).unwrap();
     let submodule_name = isl_typename[4..].to_string();
     let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);

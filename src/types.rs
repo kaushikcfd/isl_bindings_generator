@@ -1,9 +1,11 @@
 use anyhow::{bail, Result};
 use std::fmt;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 use crate::utils::guard_identifier;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, EnumIter, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CType {
   Void,
   ISLBool,
@@ -644,5 +646,67 @@ pub fn get_isl_struct_name(type_: CType) -> Result<&'static str> {
     CType::ISLSchedule => Ok("isl_schedule"),
     CType::ISLScheduleNode => Ok("isl_schedule_node"),
     _ => bail!("not a core ISL type."),
+  }
+}
+
+pub fn is_isl_struct_type(type_: CType) -> bool {
+  match type_ {
+    CType::ISLArgs
+    | CType::ISLCtx
+    | CType::ISLOptions
+    | CType::ISLAff
+    | CType::ISLAffList
+    | CType::ISLMultiAff
+    | CType::ISLLocalSpace
+    | CType::ISLSpace
+    | CType::ISLId
+    | CType::ISLIdList
+    | CType::ISLMultiId
+    | CType::ISLBasicSet
+    | CType::ISLBasicSetList
+    | CType::ISLBasicMap
+    | CType::ISLBasicMapList
+    | CType::ISLPrinter
+    | CType::ISLSet
+    | CType::ISLTerm
+    | CType::ISLUnionSet
+    | CType::ISLUnionSetList
+    | CType::ISLSetList
+    | CType::ISLMap
+    | CType::ISLUnionMap
+    | CType::ISLUnionMapList
+    | CType::ISLMapList
+    | CType::ISLMultiVal
+    | CType::ISLVal
+    | CType::ISLValList
+    | CType::ISLVec
+    | CType::ISLMat
+    | CType::ISLPoint
+    | CType::ISLConstraint
+    | CType::ISLConstraintList
+    | CType::ISLStrideInfo
+    | CType::ISLFixedBox
+    | CType::ISLUnionPwAff
+    | CType::ISLUnionPwAffList
+    | CType::ISLUnionPwMultiAffList
+    | CType::ISLPwAff
+    | CType::ISLPwAffList
+    | CType::ISLPwMultiAff
+    | CType::ISLPwMultiAffList
+    | CType::ISLUnionPwMultiAff
+    | CType::ISLMultiPwAff
+    | CType::ISLMultiUnionPwAff
+    | CType::ISLQPolynomial
+    | CType::ISLQPolynomialList
+    | CType::ISLQPolynomialFold
+    | CType::ISLPwQPolynomialFold
+    | CType::ISLUnionPwQPolynomialFold
+    | CType::ISLPwQPolynomialFoldList
+    | CType::ISLPwQPolynomial
+    | CType::ISLPwQPolynomialList
+    | CType::ISLUnionPwQPolynomial
+    | CType::ISLSchedule
+    | CType::ISLScheduleNode => true,
+    _ => false,
   }
 }
