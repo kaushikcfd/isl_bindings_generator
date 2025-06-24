@@ -79,7 +79,7 @@ pub enum CType {
   ISLUnionPwQPolynomial,
   ISLSchedule,
   ISLScheduleNode,
-  ISLScheduleConstaints,
+  ISLScheduleConstraints,
   Unsupported,
 }
 
@@ -209,7 +209,7 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "isl_schedule *" | "struct isl_schedule *" => Ok(CType::ISLSchedule),
     "isl_schedule_node *" | "struct isl_schedule_node *" => Ok(CType::ISLScheduleNode),
     "isl_schedule_constraints *" | "struct isl_schedule_constraints *" => {
-      Ok(CType::ISLScheduleConstaints)
+      Ok(CType::ISLScheduleConstraints)
     }
     "isl_point *" | "struct isl_point *" => Ok(CType::ISLPoint),
     "isl_id_list *" | "struct isl_id_list *" => Ok(CType::ISLIdList),
@@ -517,7 +517,7 @@ pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
     CType::ISLUnionPwQPolynomial => Ok("UnionPwQPolynomial"),
     CType::ISLSchedule => Ok("Schedule"),
     CType::ISLScheduleNode => Ok("ScheduleNode"),
-    CType::ISLScheduleConstaints => Ok("ScheduleConstaints"),
+    CType::ISLScheduleConstraints => Ok("ScheduleConstraints"),
     CType::Unsupported => bail!("Cannot convert this type to rust!"),
   }
 }
@@ -598,7 +598,7 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::ISLUnionPwQPolynomial
     | CType::ISLSchedule
     | CType::ISLScheduleNode
-    | CType::ISLScheduleConstaints => Ok("uintptr_t"),
+    | CType::ISLScheduleConstraints => Ok("uintptr_t"),
     CType::Unsupported => bail!("Cannot convert this type to rust!"),
   }
 }
@@ -659,6 +659,7 @@ pub fn get_isl_struct_name(type_: CType) -> Result<&'static str> {
     CType::ISLPwQPolynomialList => Ok("isl_pw_qpolynomial_list"),
     CType::ISLUnionPwQPolynomial => Ok("isl_union_pw_qpolynomial"),
     CType::ISLSchedule => Ok("isl_schedule"),
+    CType::ISLScheduleConstraints => Ok("isl_schedule_constraints"),
     CType::ISLScheduleNode => Ok("isl_schedule_node"),
     _ => bail!("not a core ISL type."),
   }
@@ -720,6 +721,7 @@ pub fn is_isl_struct_type(type_: CType) -> bool {
     | CType::ISLPwQPolynomialList
     | CType::ISLUnionPwQPolynomial
     | CType::ISLSchedule
+    | CType::ISLScheduleConstraints
     | CType::ISLScheduleNode => true,
     _ => false,
   }

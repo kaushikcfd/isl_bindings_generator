@@ -111,7 +111,7 @@ fn imports_for_type(type_: CType, scope: &mut Scope) -> Result<()> {
     | CType::ISLError
     | CType::ISLFold
     | CType::ISLStat
-    | CType::ISLScheduleConstaints => {
+    | CType::ISLScheduleConstraints => {
       scope.import("libc", "uintptr_t");
       scope.import("super", get_rust_typename(type_)?);
       Ok(())
@@ -208,7 +208,7 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
     | CType::ISLUnionPwQPolynomial
     | CType::ISLSchedule
     | CType::ISLScheduleNode
-    | CType::ISLScheduleConstaints => {
+    | CType::ISLScheduleConstraints => {
       match borrow {
         ISLBorrowRule::IslKeep | ISLBorrowRule::IslTake => {
           method.line(format!("let {} = {}.ptr;", arg_name, arg_name));
@@ -314,7 +314,7 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
     | CType::ISLUnionPwQPolynomial
     | CType::ISLSchedule
     | CType::ISLScheduleNode
-    | CType::ISLScheduleConstaints => {
+    | CType::ISLScheduleConstraints => {
       let should_drop_on_free =
         if isl_func.ret_type == CType::ISLCtx && isl_func.name != "isl_ctx_alloc" {
           "false"
