@@ -177,6 +177,9 @@ fn get_borrow_rule_between(loc1_: &LocTriple, loc2: &LocTriple, state: &mut Pars
     Ok(ISLBorrowRule::IslKeep)
   } else if in_between_code.contains("__isl_take") {
     Ok(ISLBorrowRule::IslTake)
+  } else if in_between_code.contains("st *") {
+    // DIRTY HACK: For isl_args_parse.
+    Ok(ISLBorrowRule::IslKeep)
   } else {
     bail!("Could not infer the borrow rule from {}", in_between_code);
   }
@@ -205,8 +208,8 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
                                                       .unwrap());
         let borrow_rule = if param_type == CType::ISLCtx {
           ISLBorrowRule::IslKeep
-        } else if param_type == CType::ISLArgs {
-          ISLBorrowRule::IslKeep
+        } else if param_type == CType::CString {
+          ISLBorrowRule::IslTake
         } else if is_primitive_ctype(param_type) {
           ISLBorrowRule::PassByValue
         } else if param_type == CType::Unsupported {

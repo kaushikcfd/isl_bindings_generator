@@ -46,6 +46,7 @@ use lazy_static::lazy_static;
 lazy_static! {
   static ref ISL_HEADERS: &'static [&'static str] = &["space_type.h",
                                                       "ctx.h",
+                                                      "options.h",
                                                       "polynomial_type.h",
                                                       "space.h",
                                                       "local_space.h",
