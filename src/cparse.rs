@@ -103,6 +103,8 @@ fn cfile_to_json(file: &String) -> Result<String> {
   let output = Command::new("clang").args(["-I",
                                            "isl/include/",
                                            "-I",
+                                           "/usr/lib/llvm-17/lib/clang/17/include/",
+                                           "-I",
                                            "/usr/lib/llvm-19/lib/clang/19/include/",
                                            "-Xclang",
                                            "-ast-dump=json",
