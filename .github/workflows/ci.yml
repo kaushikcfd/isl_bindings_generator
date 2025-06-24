@@ -34,14 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
-        with:
-          version: "17.0"
-          directory: ${{ runner.temp }}/llvm
-      - name: Symlink libclang.so
         run: |
-          sudo ln -s libclang.so.17 /lib/x86_64-linux-gnu/libclang.so
-        working-directory: ${{ env.LLVM_PATH }}/lib
+          sudo apt update
+          sudo apt install -y clang
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
