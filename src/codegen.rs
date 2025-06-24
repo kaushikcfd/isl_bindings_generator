@@ -76,12 +76,25 @@ fn imports_for_type(type_: CType, scope: &mut Scope) -> Result<()> {
     | CType::ISLMultiVal
     | CType::ISLVal
     | CType::ISLValList
+    | CType::ISLRestriction
     | CType::ISLVec
     | CType::ISLMat
     | CType::ISLPoint
+    | CType::ISLVertex
+    | CType::ISLCell
+    | CType::ISLVertices
     | CType::ISLConstraint
     | CType::ISLConstraintList
     | CType::ISLStrideInfo
+    | CType::ISLASTExpr
+    | CType::ISLASTNode
+    | CType::ISLASTNodeList
+    | CType::ISLASTExprList
+    | CType::ISLIdToASTExpr
+    | CType::ISLFlow
+    | CType::ISLUnionFlow
+    | CType::ISLAccessInfo
+    | CType::ISLUnionAccessInfo
     | CType::ISLFixedBox
     | CType::ISLUnionPwAff
     | CType::ISLUnionPwAffList
@@ -105,6 +118,9 @@ fn imports_for_type(type_: CType, scope: &mut Scope) -> Result<()> {
     | CType::ISLSchedule
     | CType::ISLScheduleNode
     | CType::ISLDimType
+    | CType::ISLASTExprType
+    | CType::ISLASTNodeType
+    | CType::ISLASTExprOpType
     | CType::ISLArgType
     | CType::ISLScheduleNodeType
     | CType::ISLASTLoopType
@@ -137,6 +153,9 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
       Ok(())
     }
     CType::ISLDimType
+    | CType::ISLASTExprType
+    | CType::ISLASTNodeType
+    | CType::ISLASTExprOpType
     | CType::ISLArgType
     | CType::ISLError
     | CType::ISLFold
@@ -180,12 +199,25 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
     | CType::ISLMultiVal
     | CType::ISLVal
     | CType::ISLValList
+    | CType::ISLRestriction
     | CType::ISLVec
     | CType::ISLMat
     | CType::ISLPoint
+    | CType::ISLVertex
+    | CType::ISLCell
+    | CType::ISLVertices
     | CType::ISLConstraint
     | CType::ISLConstraintList
     | CType::ISLStrideInfo
+    | CType::ISLASTExpr
+    | CType::ISLASTNode
+    | CType::ISLASTNodeList
+    | CType::ISLASTExprList
+    | CType::ISLIdToASTExpr
+    | CType::ISLFlow
+    | CType::ISLUnionFlow
+    | CType::ISLAccessInfo
+    | CType::ISLUnionAccessInfo
     | CType::ISLFixedBox
     | CType::ISLUnionPwAff
     | CType::ISLUnionPwAffList
@@ -238,6 +270,9 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
     | CType::F64
     | CType::Sizet => Ok(()),
     CType::ISLDimType
+    | CType::ISLASTExprType
+    | CType::ISLASTNodeType
+    | CType::ISLASTExprOpType
     | CType::ISLArgType
     | CType::ISLError
     | CType::ISLFold
@@ -291,12 +326,25 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
     | CType::ISLMultiVal
     | CType::ISLVal
     | CType::ISLValList
+    | CType::ISLRestriction
     | CType::ISLVec
     | CType::ISLMat
     | CType::ISLPoint
+    | CType::ISLVertex
+    | CType::ISLCell
+    | CType::ISLVertices
     | CType::ISLConstraint
     | CType::ISLConstraintList
     | CType::ISLStrideInfo
+    | CType::ISLASTExpr
+    | CType::ISLASTNode
+    | CType::ISLASTNodeList
+    | CType::ISLASTExprList
+    | CType::ISLIdToASTExpr
+    | CType::ISLFlow
+    | CType::ISLUnionFlow
+    | CType::ISLAccessInfo
+    | CType::ISLUnionAccessInfo
     | CType::ISLFixedBox
     | CType::ISLUnionPwAff
     | CType::ISLUnionPwAffList
