@@ -69,7 +69,12 @@ lazy_static! {
                                                       "fixed_box.h",
                                                       "printer.h",
                                                       "schedule_node.h",
-                                                      "schedule.h",];
+                                                      "schedule.h",
+                                                      "flow.h",
+                                                      "lp.h",
+                                                      "ilp.h",
+                                                      "ast.h",
+                                                      "vertices.h"];
   static ref ISL_ENUM_TO_PREFIX: HashMap<CType, &'static str> =
     HashMap::from([(CType::ISLDimType, "isl_dim_"),
                    (CType::ISLFold, "isl_fold_"),
