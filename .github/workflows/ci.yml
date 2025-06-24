@@ -49,5 +49,8 @@ jobs:
           override: true
       - name: Run tests
         run: |
-          git clone https://repo.or.cz/isl.git
-          cargo run
+          git clone --recursive https://repo.or.cz/isl.git
+          cd isl
+          ./autogen.sh && ./configure
+          cd ..
+          cargo run --release
