@@ -21,9 +21,12 @@ pub enum CType {
   ISLCtx,
   ISLOptions,
   ISLDimType,
+  ISLArgType,
   ISLError,
   ISLFold,
   ISLStat,
+  ISLScheduleNodeType,
+  ISLASTLoopType,
   ISLAff,
   ISLAffList,
   ISLMultiAff,
@@ -238,6 +241,9 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "enum isl_fold" | "isl_fold" => Ok(CType::ISLFold),
     "enum isl_error" | "isl_error" => Ok(CType::ISLError),
     "enum isl_dim_type" | "isl_dim_type" => Ok(CType::ISLDimType),
+    "enum isl_arg_type" | "isl_arg_type" => Ok(CType::ISLArgType),
+    "enum isl_schedule_node_type" | "isl_schedule_node_type" => Ok(CType::ISLScheduleNodeType),
+    "enum isl_ast_loop_type" | "isl_ast_loop_type" => Ok(CType::ISLASTLoopType),
     "const char *" | "char *" => Ok(CType::CString),
     "uint32_t" => Ok(CType::U32),
     "void" => Ok(CType::Void),
@@ -411,6 +417,7 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     | "isl_stat (*)(isl_pw_qpolynomial_fold_list *, void *)"
     | "isl_bool (*)(isl_schedule_node *, void *)"
     | "isl_schedule_node *(*)(isl_schedule_node *, void *)"
+    | "isl_stat (*)(isl_schedule_node *, void *)"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
   }
@@ -427,7 +434,11 @@ pub fn is_primitive_ctype(type_: CType) -> bool {
     | CType::F64
     | CType::Sizet
     | CType::ISLDimType
+    | CType::ISLArgType
     | CType::ISLFold
+    | CType::ISLStat
+    | CType::ISLASTLoopType
+    | CType::ISLScheduleNodeType
     | CType::ISLError => true,
     _ => false,
   }
@@ -449,6 +460,9 @@ pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
     CType::ISLCtx => Ok("Context"),
     CType::ISLOptions => Ok("Options"),
     CType::ISLDimType => Ok("DimType"),
+    CType::ISLArgType => Ok("ArgType"),
+    CType::ISLScheduleNodeType => Ok("ScheduleNodeType"),
+    CType::ISLASTLoopType => Ok("ASTLoopType"),
     CType::ISLError => Ok("Error"),
     CType::ISLFold => Ok("Fold"),
     CType::ISLStat => Ok("Stat"),
@@ -522,9 +536,14 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::F32
     | CType::F64
     | CType::Sizet => get_rust_typename(type_),
-    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat | CType::ISLBool => {
-      Ok("i32")
-    }
+    CType::ISLDimType
+    | CType::ISLArgType
+    | CType::ISLError
+    | CType::ISLFold
+    | CType::ISLStat
+    | CType::ISLBool
+    | CType::ISLASTLoopType
+    | CType::ISLScheduleNodeType => Ok("i32"),
     CType::CString => Ok("*const c_char"),
     CType::ISLArgs
     | CType::ISLCtx
