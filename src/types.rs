@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
 use std::fmt;
-use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 use crate::utils::guard_identifier;
@@ -20,6 +19,9 @@ pub enum CType {
   ISLCtx,
   ISLOptions,
   ISLDimType,
+  ISLASTExprType,
+  ISLASTNodeType,
+  ISLASTExprOpType,
   ISLArgType,
   ISLError,
   ISLFold,
@@ -51,12 +53,25 @@ pub enum CType {
   ISLMultiVal,
   ISLVal,
   ISLValList,
+  ISLRestriction,
   ISLVec,
   ISLMat,
   ISLPoint,
+  ISLVertex,
+  ISLCell,
+  ISLVertices,
   ISLConstraint,
   ISLConstraintList,
   ISLStrideInfo,
+  ISLASTExpr,
+  ISLASTNode,
+  ISLASTNodeList,
+  ISLASTExprList,
+  ISLIdToASTExpr,
+  ISLFlow,
+  ISLUnionFlow,
+  ISLUnionAccessInfo,
+  ISLAccessInfo,
   ISLFixedBox,
   ISLUnionPwAff,
   ISLUnionPwAffList,
@@ -201,8 +216,18 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "isl_ctx *" | "struct isl_ctx *" => Ok(CType::ISLCtx),
     "isl_id *" | "struct isl_id *" => Ok(CType::ISLId),
     "isl_stride_info *" => Ok(CType::ISLStrideInfo),
+    "struct isl_ast_expr *" | "isl_ast_expr *" => Ok(CType::ISLASTExpr),
+    "struct isl_ast_node *" | "isl_ast_node *" => Ok(CType::ISLASTNode),
+    "struct isl_ast_node_list *" | "isl_ast_node_list *" => Ok(CType::ISLASTNodeList),
+    "struct isl_ast_expr_list *" | "isl_ast_expr_list *" => Ok(CType::ISLASTExprList),
+    "isl_id_to_ast_expr *" => Ok(CType::ISLIdToASTExpr),
+    "isl_flow *" => Ok(CType::ISLFlow),
+    "isl_union_flow *" => Ok(CType::ISLUnionFlow),
+    "isl_access_info *" => Ok(CType::ISLAccessInfo),
+    "isl_union_access_info *" => Ok(CType::ISLUnionAccessInfo),
     "isl_fixed_box *" => Ok(CType::ISLFixedBox),
     "isl_vec *" => Ok(CType::ISLVec),
+    "isl_restriction *" => Ok(CType::ISLRestriction),
     "isl_mat *" => Ok(CType::ISLMat),
     "isl_constraint *" | "struct isl_constraint *" => Ok(CType::ISLConstraint),
     "isl_constraint_list *" | "struct isl_constraint_list *" => Ok(CType::ISLConstraintList),
@@ -212,6 +237,9 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
       Ok(CType::ISLScheduleConstraints)
     }
     "isl_point *" | "struct isl_point *" => Ok(CType::ISLPoint),
+    "isl_vertex *" | "struct isl_vertex *" => Ok(CType::ISLVertex),
+    "isl_cell *" | "struct isl_cell *" => Ok(CType::ISLCell),
+    "isl_vertices *" | "struct isl_vertices *" => Ok(CType::ISLVertices),
     "isl_id_list *" | "struct isl_id_list *" => Ok(CType::ISLIdList),
     "isl_multi_id *" | "struct isl_multi_id *" => Ok(CType::ISLMultiId),
     "isl_basic_set *" | "struct isl_basic_set *" | "const isl_basic_set *" => {
@@ -239,6 +267,9 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "enum isl_fold" | "isl_fold" => Ok(CType::ISLFold),
     "enum isl_error" | "isl_error" => Ok(CType::ISLError),
     "enum isl_dim_type" | "isl_dim_type" => Ok(CType::ISLDimType),
+    "enum isl_ast_expr_type" | "isl_ast_expr_type" => Ok(CType::ISLASTExprType),
+    "enum isl_ast_node_type" | "isl_ast_node_type" => Ok(CType::ISLASTNodeType),
+    "enum isl_ast_expr_op_type" | "isl_ast_expr_op_type" => Ok(CType::ISLASTExprOpType),
     "enum isl_arg_type" | "isl_arg_type" => Ok(CType::ISLArgType),
     "enum isl_schedule_node_type" | "isl_schedule_node_type" => Ok(CType::ISLScheduleNodeType),
     "enum isl_ast_loop_type" | "isl_ast_loop_type" => Ok(CType::ISLASTLoopType),
@@ -417,6 +448,30 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     | "isl_schedule_node *(*)(isl_schedule_node *, void *)"
     | "isl_stat (*)(isl_schedule_node *, void *)"
     | "struct isl_args *"
+    | "isl_access_level_before"
+    | "isl_access_restrict"
+    | "isl_stat (*)(isl_map *, int, void *, void *)"
+    | "isl_union_map **"
+    | "isl_stat (*)(isl_id *, isl_ast_expr *, void *)"
+    | "isl_bool (*)(isl_id *, isl_ast_expr *, void *)"
+    | "isl_bool (*)(isl_ast_node *, void *)"
+    | "isl_ast_node *(*)(isl_ast_node *, void *)"
+    | "isl_printer *(*)(isl_printer *, isl_ast_print_options *, isl_ast_node *, void *)"
+    | "isl_stat (*)(enum isl_ast_expr_op_type, void *)"
+    | "isl_stat (*)(isl_ast_expr *, void *)"
+    | "isl_bool (*)(isl_ast_expr *, void *)"
+    | "isl_ast_expr *(*)(isl_ast_expr *, void *)"
+    | "int (*)(struct isl_ast_expr *, struct isl_ast_expr *, void *)"
+    | "isl_bool (*)(isl_ast_expr *, isl_ast_expr *, void *)"
+    | "isl_stat (*)(isl_ast_expr_list *, void *)"
+    | "isl_stat (*)(isl_ast_node *, void *)"
+    | "int (*)(struct isl_ast_node *, struct isl_ast_node *, void *)"
+    | "isl_bool (*)(isl_ast_node *, isl_ast_node *, void *)"
+    | "isl_stat (*)(isl_ast_node_list *, void *)"
+    | "isl_stat (*)(isl_vertex *, void *)"
+    | "isl_stat (*)(isl_cell *, void *)"
+    | "isl_maybe_isl_ast_expr"
+    | "isl_ast_print_options *"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
   }
@@ -433,6 +488,9 @@ pub fn is_primitive_ctype(type_: CType) -> bool {
     | CType::F64
     | CType::Sizet
     | CType::ISLDimType
+    | CType::ISLASTExprType
+    | CType::ISLASTNodeType
+    | CType::ISLASTExprOpType
     | CType::ISLArgType
     | CType::ISLFold
     | CType::ISLStat
@@ -458,6 +516,9 @@ pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
     CType::ISLCtx => Ok("Context"),
     CType::ISLOptions => Ok("Options"),
     CType::ISLDimType => Ok("DimType"),
+    CType::ISLASTExprType => Ok("ASTExprType"),
+    CType::ISLASTNodeType => Ok("ASTNodeType"),
+    CType::ISLASTExprOpType => Ok("ASTExprOpType"),
     CType::ISLArgType => Ok("ArgType"),
     CType::ISLScheduleNodeType => Ok("ScheduleNodeType"),
     CType::ISLASTLoopType => Ok("ASTLoopType"),
@@ -489,12 +550,25 @@ pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
     CType::ISLMultiVal => Ok("MultiVal"),
     CType::ISLVal => Ok("Val"),
     CType::ISLValList => Ok("ValList"),
+    CType::ISLRestriction => Ok("Restriction"),
     CType::ISLVec => Ok("Vec"),
     CType::ISLMat => Ok("Mat"),
     CType::ISLPoint => Ok("Point"),
+    CType::ISLVertex => Ok("Vertex"),
+    CType::ISLCell => Ok("Cell"),
+    CType::ISLVertices => Ok("Vertices"),
     CType::ISLConstraint => Ok("Constraint"),
     CType::ISLConstraintList => Ok("ConstraintList"),
+    CType::ISLFlow => Ok("Flow"),
+    CType::ISLUnionFlow => Ok("UnionFlow"),
     CType::ISLStrideInfo => Ok("StrideInfo"),
+    CType::ISLASTExpr => Ok("ASTExpr"),
+    CType::ISLASTNode => Ok("ASTNode"),
+    CType::ISLASTNodeList => Ok("ASTNodeList"),
+    CType::ISLASTExprList => Ok("ASTExprList"),
+    CType::ISLIdToASTExpr => Ok("IdToASTExpr"),
+    CType::ISLAccessInfo => Ok("AccessInfo"),
+    CType::ISLUnionAccessInfo => Ok("UnionAccessInfo"),
     CType::ISLFixedBox => Ok("FixedBox"),
     CType::ISLUnionPwAff => Ok("UnionPwAff"),
     CType::ISLUnionPwAffList => Ok("UnionPwAffList"),
@@ -535,6 +609,9 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::F64
     | CType::Sizet => get_rust_typename(type_),
     CType::ISLDimType
+    | CType::ISLASTExprType
+    | CType::ISLASTNodeType
+    | CType::ISLASTExprOpType
     | CType::ISLArgType
     | CType::ISLError
     | CType::ISLFold
@@ -570,12 +647,25 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::ISLMultiVal
     | CType::ISLVal
     | CType::ISLValList
+    | CType::ISLRestriction
     | CType::ISLVec
     | CType::ISLMat
     | CType::ISLPoint
+    | CType::ISLVertex
+    | CType::ISLCell
+    | CType::ISLVertices
     | CType::ISLConstraint
     | CType::ISLConstraintList
+    | CType::ISLFlow
+    | CType::ISLUnionFlow
     | CType::ISLStrideInfo
+    | CType::ISLASTExpr
+    | CType::ISLASTNode
+    | CType::ISLASTNodeList
+    | CType::ISLASTExprList
+    | CType::ISLIdToASTExpr
+    | CType::ISLAccessInfo
+    | CType::ISLUnionAccessInfo
     | CType::ISLFixedBox
     | CType::ISLUnionPwAff
     | CType::ISLUnionPwAffList
@@ -632,12 +722,25 @@ pub fn get_isl_struct_name(type_: CType) -> Result<&'static str> {
     CType::ISLMultiVal => Ok("isl_multi_val"),
     CType::ISLVal => Ok("isl_val"),
     CType::ISLValList => Ok("isl_val_list"),
+    CType::ISLRestriction => Ok("isl_restriction"),
     CType::ISLVec => Ok("isl_vec"),
     CType::ISLMat => Ok("isl_mat"),
     CType::ISLPoint => Ok("isl_point"),
+    CType::ISLVertex => Ok("isl_vertex"),
+    CType::ISLCell => Ok("isl_cell"),
+    CType::ISLVertices => Ok("isl_vertices"),
     CType::ISLConstraint => Ok("isl_constraint"),
     CType::ISLConstraintList => Ok("isl_constraint_list"),
     CType::ISLStrideInfo => Ok("isl_stride_info"),
+    CType::ISLASTExpr => Ok("isl_ast_expr"),
+    CType::ISLASTNode => Ok("isl_ast_node"),
+    CType::ISLASTNodeList => Ok("isl_ast_node_list"),
+    CType::ISLASTExprList => Ok("isl_ast_expr_list"),
+    CType::ISLIdToASTExpr => Ok("isl_id_to_ast_expr"),
+    CType::ISLFlow => Ok("isl_flow"),
+    CType::ISLUnionFlow => Ok("isl_union_flow"),
+    CType::ISLAccessInfo => Ok("isl_access_info"),
+    CType::ISLUnionAccessInfo => Ok("isl_union_access_info"),
     CType::ISLFixedBox => Ok("isl_fixed_box"),
     CType::ISLUnionPwAff => Ok("isl_union_pw_aff"),
     CType::ISLUnionPwAffList => Ok("isl_union_pw_aff_list"),
@@ -694,12 +797,25 @@ pub fn is_isl_struct_type(type_: CType) -> bool {
     | CType::ISLMultiVal
     | CType::ISLVal
     | CType::ISLValList
+    | CType::ISLRestriction
     | CType::ISLVec
     | CType::ISLMat
     | CType::ISLPoint
+    | CType::ISLVertex
+    | CType::ISLCell
+    | CType::ISLVertices
     | CType::ISLConstraint
     | CType::ISLConstraintList
     | CType::ISLStrideInfo
+    | CType::ISLASTExpr
+    | CType::ISLASTNode
+    | CType::ISLASTNodeList
+    | CType::ISLASTExprList
+    | CType::ISLIdToASTExpr
+    | CType::ISLFlow
+    | CType::ISLUnionFlow
+    | CType::ISLAccessInfo
+    | CType::ISLUnionAccessInfo
     | CType::ISLFixedBox
     | CType::ISLUnionPwAff
     | CType::ISLUnionPwAffList
