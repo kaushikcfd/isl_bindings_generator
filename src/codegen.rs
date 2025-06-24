@@ -49,8 +49,7 @@ fn imports_for_type(type_: CType, scope: &mut Scope) -> Result<()> {
       scope.import("std::os::raw", "c_char");
       Ok(())
     }
-    CType::ISLArgs
-    | CType::ISLCtx
+    CType::ISLCtx
     | CType::ISLOptions
     | CType::ISLAff
     | CType::ISLAffList
@@ -149,13 +148,12 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
       Ok(())
     }
     CType::CString => {
-      assert_eq!(borrow, ISLBorrowRule::IslKeep);
+      assert_eq!(borrow, ISLBorrowRule::IslTake);
       method.line(format!("let {} = CString::new({}).unwrap();", arg_name, arg_name));
       method.line(format!("let {} = {}.as_ptr();", arg_name, arg_name));
       Ok(())
     }
-    CType::ISLArgs
-    | CType::ISLCtx
+    CType::ISLCtx
     | CType::ISLOptions
     | CType::ISLAff
     | CType::ISLAffList
@@ -261,8 +259,7 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
       method.line(format!("let {} = {}.to_str().unwrap();", return_var, return_var));
       Ok(())
     }
-    CType::ISLArgs
-    | CType::ISLCtx
+    CType::ISLCtx
     | CType::ISLOptions
     | CType::ISLAff
     | CType::ISLAffList

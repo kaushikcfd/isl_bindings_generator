@@ -17,7 +17,6 @@ pub enum CType {
   F64,
   Sizet,
   CString,
-  ISLArgs,
   ISLCtx,
   ISLOptions,
   ISLDimType,
@@ -199,7 +198,6 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     "float" => Ok(CType::F32),
     "double" => Ok(CType::F64),
     "isl_bool" => Ok(CType::ISLBool),
-    "struct isl_args *" => Ok(CType::ISLArgs),
     "isl_ctx *" | "struct isl_ctx *" => Ok(CType::ISLCtx),
     "isl_id *" | "struct isl_id *" => Ok(CType::ISLId),
     "isl_stride_info *" => Ok(CType::ISLStrideInfo),
@@ -418,6 +416,7 @@ pub fn ctype_from_string<S>(s: &S) -> Result<CType>
     | "isl_bool (*)(isl_schedule_node *, void *)"
     | "isl_schedule_node *(*)(isl_schedule_node *, void *)"
     | "isl_stat (*)(isl_schedule_node *, void *)"
+    | "struct isl_args *"
     | "FILE *" => Ok(CType::Unsupported),
     _ => bail!(format!("Unknown ctype '{}'.", s)),
   }
@@ -456,7 +455,6 @@ pub fn get_rust_typename(type_: CType) -> Result<&'static str> {
     CType::F64 => Ok("f64"),
     CType::Sizet => Ok("usize"),
     CType::CString => Ok("&str"),
-    CType::ISLArgs => Ok("Args"),
     CType::ISLCtx => Ok("Context"),
     CType::ISLOptions => Ok("Options"),
     CType::ISLDimType => Ok("DimType"),
@@ -545,8 +543,7 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
     | CType::ISLASTLoopType
     | CType::ISLScheduleNodeType => Ok("i32"),
     CType::CString => Ok("*const c_char"),
-    CType::ISLArgs
-    | CType::ISLCtx
+    CType::ISLCtx
     | CType::ISLOptions
     | CType::ISLAff
     | CType::ISLAffList
@@ -608,7 +605,6 @@ pub fn get_typename_in_extern_block(type_: CType) -> Result<&'static str> {
 
 pub fn get_isl_struct_name(type_: CType) -> Result<&'static str> {
   match type_ {
-    CType::ISLArgs => Ok("isl_args"),
     CType::ISLCtx => Ok("isl_ctx"),
     CType::ISLOptions => Ok("isl_options"),
     CType::ISLAff => Ok("isl_aff"),
@@ -670,8 +666,7 @@ pub fn get_isl_struct_name(type_: CType) -> Result<&'static str> {
 
 pub fn is_isl_struct_type(type_: CType) -> bool {
   match type_ {
-    CType::ISLArgs
-    | CType::ISLCtx
+    CType::ISLCtx
     | CType::ISLOptions
     | CType::ISLAff
     | CType::ISLAffList
