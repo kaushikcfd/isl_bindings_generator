@@ -106,6 +106,7 @@ fn cfile_to_json(file: &String) -> Result<String> {
                                            "/usr/lib/llvm-19/lib/clang/19/include/",
                                            "-Xclang",
                                            "-ast-dump=json",
+                                           "-D__isl_export=",
                                            "-Xclang",
                                            "-detailed-preprocessing-record",
                                            file.as_str()])

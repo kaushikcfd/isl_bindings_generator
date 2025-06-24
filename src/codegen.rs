@@ -106,6 +106,9 @@ fn imports_for_type(type_: CType, scope: &mut Scope) -> Result<()> {
     | CType::ISLSchedule
     | CType::ISLScheduleNode
     | CType::ISLDimType
+    | CType::ISLArgType
+    | CType::ISLScheduleNodeType
+    | CType::ISLASTLoopType
     | CType::ISLError
     | CType::ISLFold
     | CType::ISLStat
@@ -134,7 +137,13 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
       assert_eq!(borrow, ISLBorrowRule::PassByValue);
       Ok(())
     }
-    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat => {
+    CType::ISLDimType
+    | CType::ISLArgType
+    | CType::ISLError
+    | CType::ISLFold
+    | CType::ISLStat
+    | CType::ISLASTLoopType
+    | CType::ISLScheduleNodeType => {
       assert_eq!(borrow, ISLBorrowRule::PassByValue);
       method.line(format!("let {} = {}.to_i32();", arg_name, arg_name));
       Ok(())
@@ -225,7 +234,13 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
     | CType::F32
     | CType::F64
     | CType::Sizet => Ok(()),
-    CType::ISLDimType | CType::ISLError | CType::ISLFold | CType::ISLStat => {
+    CType::ISLDimType
+    | CType::ISLArgType
+    | CType::ISLError
+    | CType::ISLFold
+    | CType::ISLStat
+    | CType::ISLASTLoopType
+    | CType::ISLScheduleNodeType => {
       method.line(format!("let {} = {}::from_i32({});",
                           return_var,
                           get_rust_typename(isl_func.ret_type)?,
