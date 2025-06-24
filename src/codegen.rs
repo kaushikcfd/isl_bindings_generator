@@ -210,7 +210,12 @@ fn shadow_var_before_passing_to_isl_c(method: &mut Function, arg_t: CType, arg_n
     | CType::ISLScheduleNode
     | CType::ISLScheduleConstraints => {
       match borrow {
-        ISLBorrowRule::IslKeep | ISLBorrowRule::IslTake => {
+        ISLBorrowRule::IslKeep => {
+          method.line(format!("let {} = {}.ptr;", arg_name, arg_name));
+        }
+        ISLBorrowRule::IslTake => {
+          method.line(format!("let mut {} = {};", arg_name, arg_name));
+          method.line(format!("{}.do_not_free_on_drop();", arg_name));
           method.line(format!("let {} = {}.ptr;", arg_name, arg_name));
         }
         _ => bail!("Unexpected borrow"),
@@ -403,7 +408,11 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
         _ => bail!("Self can only be take or keep."),
       };
       arg_names_in_fn_body.push("self");
-      method.line(format!("let {} = {}.ptr;", func.parameters[0].name, "self"));
+      method.line(format!("let {} = {};", func.parameters[0].name, "self"));
+      shadow_var_before_passing_to_isl_c(method,
+                                         func.parameters[0].type_,
+                                         &func.parameters[0].name,
+                                         func.parameters[0].borrow)?;
     }
     // Add parameters to the binding function.
     for param in func.parameters[arg_names_in_fn_body.len()..].iter() {
@@ -431,6 +440,12 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
     // Return isl_rs_result
     method.line("isl_rs_result");
   }
+  impl_scope.new_fn("do_not_free_on_drop")
+            .vis("pub")
+            .doc(format!("Does not call {}_free() on being dropped. (For internal use only.)",
+                         get_isl_struct_name(type_)?))
+            .arg_mut_self()
+            .line("self.should_free_on_drop = false;");
 
   // {{{ impl Drop for `type_`.
 
