@@ -254,6 +254,10 @@ pub fn main() {
   // }}}
 
   {
+    let mut isl_enums_unsorted: Vec<&ISLEnum> = isl_enums.iter().collect();
+    isl_enums_unsorted.sort_by_cached_key(|e| e.name.clone());
+    let isl_enums = isl_enums_unsorted;
+
     let mut submodule_scope = Scope::new();
     let submodule_name = "enums";
     let submodule_path = format!("{}/{}.rs", "src/bindings/", submodule_name);

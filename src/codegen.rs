@@ -390,10 +390,13 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
                             -> Result<()> {
   let rust_ty_name = get_rust_typename(type_)?;
   let isl_typename = get_isl_struct_name(type_)?;
-  let isl_functions: Vec<&ISLFunction> = isl_functions.iter()
-                                                      .filter(|f| f.has_all_known_types())
-                                                      .filter(|f| f.name.starts_with(isl_typename))
-                                                      .collect();
+  let mut isl_functions_unsorted: Vec<&ISLFunction> =
+    isl_functions.iter()
+                 .filter(|f| f.has_all_known_types())
+                 .filter(|f| f.name.starts_with(isl_typename))
+                 .collect();
+  isl_functions_unsorted.sort_by_cached_key(|p| p.name.clone());
+  let isl_functions = isl_functions_unsorted;
 
   // Import necessary types.
   for func in &isl_functions {
@@ -511,7 +514,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
   return Ok(());
 }
 
-pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim: &str)
+pub fn generate_enums(scope: &mut Scope, enum_: &ISLEnum, variant_prefix_to_trim: &str)
                       -> Result<()> {
   let rust_ty_name = get_rust_typename(ctype_from_string(&enum_.name)?)?;
   let enum_def = scope.new_enum(rust_ty_name)
@@ -560,7 +563,7 @@ pub fn generate_enums(scope: &mut Scope, enum_: ISLEnum, variant_prefix_to_trim:
          .vis("pub")
          .doc(format!("Constructor based on the i32 values as defined in libisl.").as_str());
   fromi32.line("match val {");
-  for (variant, value) in enum_.variants.iter().zip(enum_.values) {
+  for (variant, value) in enum_.variants.iter().zip(enum_.values.clone()) {
     assert_eq!(variant[..variant_prefix_to_trim.len()],
                variant_prefix_to_trim.to_string());
     let variant_name_in_rust =
