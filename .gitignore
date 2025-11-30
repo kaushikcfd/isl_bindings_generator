@@ -18,3 +18,4 @@
 # ignore isl/ and src/bindings/ to make testing easier
 isl/
 src/bindings/
+.vscode
