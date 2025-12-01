@@ -137,6 +137,7 @@ pub struct ISLFunction {
   pub name: String,
   pub parameters: Vec<Parameter>,
   pub ret_type: CType,
+  pub parent_struct_type: Option<CType>,
 }
 
 impl ISLFunction {
@@ -153,7 +154,8 @@ impl ISLFunction {
                                          .iter()
                                          .map(|p| p.make_identifier_rust_legal())
                                          .collect(),
-                         ret_type: self.ret_type };
+                         ret_type: self.ret_type,
+                         parent_struct_type: self.parent_struct_type };
   }
 }
 

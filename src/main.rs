@@ -296,24 +296,27 @@ pub fn main() {
     submodule_scope.raw("pub use super::Error;");
     submodule_scope.new_struct(rust_ty_name)
       .derive("Debug")
+      .field("kind", "Error")
       .field("msg", "String")
-      .field("kind", "")
       .vis("pub")
       .doc(format!("Returns errors caught in libisl values as defined in libisl.").as_str());
-    let libisl_error_impl = submodule_scope.new_impl(rust_ty_name);
-    libisl_error_impl.new_fn("new")
-                     .generic("M: Into<String>")
-                     .arg("kind", "Error")
-                     .arg("msg", "M")
-                     .line("Self { kind: kind, msg: msg.into() }")
-                     .ret("Self");
-    libisl_error_impl.impl_trait("std::fmt::Display")
-                     .new_fn("fmt")
-                     .arg_ref_self()
-                     .arg("f", "&mut std::fmt::Formatter<'_>")
-                     .line("write!(f, \"[{:?}] {}\", self.kind, self.msg)")
-                     .ret("std::fmt::Result");
-    libisl_error_impl.impl_trait("std::error::Error ");
+    submodule_scope.new_impl(rust_ty_name)
+                   .new_fn("new")
+                   .vis("pub")
+                   .generic("M: Into<String>")
+                   .arg("kind", "Error")
+                   .arg("msg", "M")
+                   .line("Self { kind: kind, msg: msg.into() }")
+                   .ret("Self");
+    submodule_scope.new_impl(rust_ty_name)
+                   .impl_trait("std::fmt::Display")
+                   .new_fn("fmt")
+                   .arg_ref_self()
+                   .arg("f", "&mut std::fmt::Formatter<'_>")
+                   .line("write!(f, \"[{:?}] {}\", self.kind, self.msg)")
+                   .ret("std::fmt::Result");
+    submodule_scope.new_impl(rust_ty_name)
+                   .impl_trait("std::error::Error");
 
     fs::write(
               submodule_path.clone(),

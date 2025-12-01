@@ -1,7 +1,8 @@
 use crate::types::{
-  ctype_from_string, is_primitive_ctype, CType, ISLBorrowRule, ISLEnum, ISLFunction, Parameter,
+  ctype_from_string, get_isl_struct_name, is_primitive_ctype, CType, ISLBorrowRule, ISLEnum,
+  ISLFunction, Parameter,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Ok, Result};
 use clang_ast::BareSourceLocation;
 use lazy_static::lazy_static;
 use serde::Serialize;
@@ -183,6 +184,85 @@ fn get_borrow_rule_between(loc1_: &LocTriple, loc2: &LocTriple, state: &mut Pars
   }
 }
 
+fn get_parent_struct_type(fn_name: &String) -> Result<Option<CType>> {
+  let ctypes: [CType; 69] = [CType::ISLVertices,
+                             CType::ISLVertex,
+                             CType::ISLVec,
+                             CType::ISLValList,
+                             CType::ISLVal,
+                             CType::ISLUnionSetList,
+                             CType::ISLUnionSet,
+                             CType::ISLUnionPwQPolynomialFold,
+                             CType::ISLUnionPwQPolynomial,
+                             CType::ISLUnionPwMultiAffList,
+                             CType::ISLUnionPwMultiAff,
+                             CType::ISLUnionPwAffList,
+                             CType::ISLUnionPwAff,
+                             CType::ISLUnionMapList,
+                             CType::ISLUnionMap,
+                             CType::ISLUnionFlow,
+                             CType::ISLUnionAccessInfo,
+                             CType::ISLTerm,
+                             CType::ISLStrideInfo,
+                             CType::ISLSpace,
+                             CType::ISLSetList,
+                             CType::ISLSet,
+                             CType::ISLScheduleNode,
+                             CType::ISLScheduleConstraints,
+                             CType::ISLSchedule,
+                             CType::ISLRestriction,
+                             CType::ISLQPolynomialList,
+                             CType::ISLQPolynomialFold,
+                             CType::ISLQPolynomial,
+                             CType::ISLPwQPolynomialList,
+                             CType::ISLPwQPolynomialFoldList,
+                             CType::ISLPwQPolynomialFold,
+                             CType::ISLPwQPolynomial,
+                             CType::ISLPwMultiAffList,
+                             CType::ISLPwMultiAff,
+                             CType::ISLPwAffList,
+                             CType::ISLPwAff,
+                             CType::ISLPrinter,
+                             CType::ISLPoint,
+                             CType::ISLOptions,
+                             CType::ISLMultiVal,
+                             CType::ISLMultiUnionPwAff,
+                             CType::ISLMultiPwAff,
+                             CType::ISLMultiId,
+                             CType::ISLMultiAff,
+                             CType::ISLMat,
+                             CType::ISLMapList,
+                             CType::ISLMap,
+                             CType::ISLLocalSpace,
+                             CType::ISLIdToASTExpr,
+                             CType::ISLIdList,
+                             CType::ISLId,
+                             CType::ISLFlow,
+                             CType::ISLFixedBox,
+                             CType::ISLCtx,
+                             CType::ISLConstraintList,
+                             CType::ISLConstraint,
+                             CType::ISLCell,
+                             CType::ISLBasicSetList,
+                             CType::ISLBasicSet,
+                             CType::ISLBasicMapList,
+                             CType::ISLBasicMap,
+                             CType::ISLAffList,
+                             CType::ISLAff,
+                             CType::ISLAccessInfo,
+                             CType::ISLASTNodeList,
+                             CType::ISLASTNode,
+                             CType::ISLASTExprList,
+                             CType::ISLASTExpr];
+  for ctype in ctypes {
+    if fn_name.starts_with(get_isl_struct_name(ctype)?) {
+      return Ok(Some(ctype));
+    }
+  }
+
+  return Ok(None);
+}
+
 fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &mut ParseState)
                           -> Result<ISLFunction> {
   let mut func_params: Vec<Parameter> = vec![];
@@ -250,7 +330,9 @@ fn get_function_from_decl(func_decl: &FunctionDecl, inner: &Vec<Node>, state: &m
 
   return Ok(ISLFunction { name: func_decl.name.clone(),
                           parameters: func_params,
-                          ret_type: ret_type }.make_identifiers_rust_legal());
+                          ret_type: ret_type,
+                          parent_struct_type: get_parent_struct_type(&func_decl.name)?
+                         }.make_identifiers_rust_legal());
 }
 
 fn get_enum_from_decl(enum_decl: &EnumDecl, inner: &Vec<Node>) -> Result<ISLEnum> {

@@ -10,6 +10,7 @@ lazy_static! {
                    ("ref", "incref"),
                    ("mod", "mod_"),
                    ("2exp", "to_exp"),
+                   ("None", "None_"),
                    ("match", "match_")]);
 }
 /// Returns an identifier based on `input` to avoid using a Rust-keyword.

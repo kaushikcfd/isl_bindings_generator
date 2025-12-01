@@ -26,8 +26,8 @@ use codegen::{Function, Scope};
 
 use crate::{
   types::{
-    ctype_from_string, get_isl_struct_name, get_rust_typename, get_typename_in_extern_block, CType,
-    ISLBorrowRule, ISLEnum, ISLFunction,
+    ctype_from_string, get_isl_struct_name, get_rust_typename, get_typename_in_extern_block,
+    is_isl_struct_type, CType, ISLBorrowRule, ISLEnum, ISLFunction,
   },
   utils::guard_identifier,
 };
@@ -393,7 +393,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
   let mut isl_functions_unsorted: Vec<&ISLFunction> =
     isl_functions.iter()
                  .filter(|f| f.has_all_known_types())
-                 .filter(|f| f.name.starts_with(isl_typename))
+                 .filter(|f| f.parent_struct_type.is_some_and(|t| t == type_))
                  .collect();
   isl_functions_unsorted.sort_by_cached_key(|p| p.name.clone());
   let isl_functions = isl_functions_unsorted;
@@ -409,6 +409,9 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
       imports_for_type(func.ret_type, scope)?;
     }
   }
+  // Import LibISLError
+  scope.import("super", "LibISLError");
+  scope.import("super", "Error");
 
   // Define the struct for type_
   scope.new_struct(rust_ty_name)
@@ -448,6 +451,7 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
     println!("Generating code for {}", func);
 
     let mut arg_names_in_fn_body: Vec<&str> = vec![];
+    // Add self to the function's parameters (if needed.)
     if func.parameters.len() > 0 && func.parameters[0].type_ == type_ {
       match func.parameters[0].borrow {
         ISLBorrowRule::IslKeep => {
@@ -460,12 +464,8 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
       };
       arg_names_in_fn_body.push("self");
       method.line(format!("let {} = {};", func.parameters[0].name, "self"));
-      shadow_var_before_passing_to_isl_c(method,
-                                         func.parameters[0].type_,
-                                         &func.parameters[0].name,
-                                         func.parameters[0].borrow)?;
     }
-    // Add parameters to the binding function.
+    // Add rest of parameters to the binding function.
     for param in func.parameters[arg_names_in_fn_body.len()..].iter() {
       let borrow_str = match param.borrow {
                          ISLBorrowRule::IslTake | ISLBorrowRule::PassByValue => "",
@@ -474,9 +474,35 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
                        }.to_string();
       method.arg(param.name.as_str(),
                  borrow_str + get_rust_typename(param.type_)?);
+    }
+
+    // Grab the isl_context for error handling.
+    let mut is_error_handling_possible = false;
+    if type_ != CType::ISLCtx && method_name != "get_ctx" {
+      for param in &func.parameters {
+        if param.type_ == CType::ISLCtx {
+          method.line(format!("let isl_rs_ctx = Context {{ ptr: {}.ptr, should_free_on_drop: false }};", param.name.clone()));
+          is_error_handling_possible = true;
+          break;
+        }
+        if is_isl_struct_type(param.type_) && param.type_ != CType::ISLOptions {
+          method.line(format!("let isl_rs_ctx = {}.get_ctx();", param.name.clone()));
+          is_error_handling_possible = true;
+          break;
+        }
+      }
+    }
+
+    // Shadow vars before passing variable to libISL.
+    for param in func.parameters.iter() {
       shadow_var_before_passing_to_isl_c(&mut method, param.type_, &param.name, param.borrow)?;
     }
-    method.ret(get_rust_typename(func.ret_type)?);
+
+    if is_error_handling_possible {
+      method.ret(format!("Result<{}, LibISLError>", get_rust_typename(func.ret_type)?));
+    } else {
+      method.ret(get_rust_typename(func.ret_type)?);
+    }
 
     let passed_args_str = func.parameters
                               .iter()
@@ -485,11 +511,23 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
                               .join(", ");
     method.line(format!("let isl_rs_result = unsafe {{ {}({}) }};",
                         func.name, passed_args_str));
-
     // Shadow isl_rs_result.
     shadow_return_from_isl_c(&mut method, func, "isl_rs_result")?;
+
+    // Error handling.
+    if is_error_handling_possible {
+      method.line("let err = isl_rs_ctx.last_error();");
+      method.line("if err != Error::None_ {");
+      method.line("return Err(LibISLError::new(err, isl_rs_ctx.last_error_msg()));");
+      method.line("}");
+    }
+
     // Return isl_rs_result
-    method.line("isl_rs_result");
+    if is_error_handling_possible {
+      method.line("Ok(isl_rs_result)");
+    } else {
+      method.line("isl_rs_result");
+    }
   }
   impl_scope.new_fn("do_not_free_on_drop")
             .vis("pub")
