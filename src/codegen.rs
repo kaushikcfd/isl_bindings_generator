@@ -289,7 +289,7 @@ fn shadow_return_from_isl_c(method: &mut Function, isl_func: &ISLFunction, retur
       method.line(format!("let {} = match {} {{", return_var, return_var));
       method.line("    0 => false,");
       method.line("    1 => true,");
-      method.line("    _ => panic!(\"Got isl_bool = -1\"),");
+      method.line("    _ => { return Err(LibISLError::new(Error::Unknown, \"Got isl_bool = -1\")); }");
       method.line("};");
       Ok(())
     }
@@ -518,7 +518,9 @@ pub fn generate_fn_bindings(scope: &mut Scope, type_: CType,
     if is_error_handling_possible {
       method.line("let err = isl_rs_ctx.last_error();");
       method.line("if err != Error::None_ {");
-      method.line("return Err(LibISLError::new(err, isl_rs_ctx.last_error_msg()));");
+      method.line("let err_msg = isl_rs_ctx.last_error_msg();");
+      method.line("isl_rs_ctx.reset_error();");
+      method.line("return Err(LibISLError::new(err, err_msg));");
       method.line("}");
     }
 
